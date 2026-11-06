@@ -28,12 +28,42 @@ namespace SilentNight.Audio
         public const string GiftLoaded = "gift_loaded";
         public const string GiftDelivered = "gift_delivered";
         public const string UiOpen = "ui_open";
+
+        // Finer-grained names. If a file for one of these is missing but its parent (see Parent) exists,
+        // the parent's files are used, so real assets stay consistent; otherwise ProceduralSfx fills in.
+        public const string FootstepCreaky = "footstep_creaky";
+        public const string FootstepTile = "footstep_tile";
+        public const string FootstepIce = "footstep_ice";
+        public const string Landing = "landing";
+        public const string GiftSmash = "gift_smash";
+        public const string ToyAlarm = "toy_alarm";
+        public const string Yowl = "yowl";
+        public const string UiClick = "ui_click";
+        public const string Snore = "snore";
+
+        /// <summary>Fallback clip name for the finer-grained names above (null if none).</summary>
+        public static string Parent(string name)
+        {
+            switch (name)
+            {
+                case FootstepCreaky:
+                case FootstepTile:
+                case FootstepIce:
+                case Landing: return FootstepWood;
+                case GiftSmash: return GiftThud;
+                case ToyAlarm: return ToyTick;
+                case Yowl: return Meow;
+                case UiClick: return UiOpen;
+                default: return null;
+            }
+        }
     }
 
     /// <summary>
     /// Persistent audio singleton (Boot scene, DontDestroyOnLoad). Reacts only to GameEvents:
     /// 3D one-shots for every Noise, per-state music with crossfade, stingers and jingles.
-    /// Missing clips are skipped silently (logged once). Just AddComponent&lt;AudioManager&gt;().
+    /// Missing clips fall back to ProceduralSfx placeholders (or silence for unknown names; logged once).
+    /// Just AddComponent&lt;AudioManager&gt;().
     /// </summary>
     [DefaultExecutionOrder(-400)]
     [DisallowMultipleComponent]
@@ -64,6 +94,10 @@ namespace SilentNight.Audio
         [Header("Resources")]
         [SerializeField] private string resourcesFolder = "Audio";
         [SerializeField, Range(0, 8)] private int maxVariants = 8;
+        [Tooltip("Synthesize soft placeholder clips (ProceduralSfx) for names with no file in Resources.")]
+        [SerializeField] private bool useProceduralFallback = true;
+        [Tooltip("Also synthesize placeholder music loops when no music file exists.")]
+        [SerializeField] private bool proceduralMusic = true;
 
         // ---- runtime
         private readonly Dictionary<string, AudioClip[]> _cache = new Dictionary<string, AudioClip[]>();
@@ -261,18 +295,33 @@ namespace SilentNight.Audio
             PlayAt(clip, e.Position, vol, maxDist);
         }
 
+        // Loudness thresholds picking the "big" variant (Gift shatter = 82, alarm ring = 62, cat tail yowl = 65).
+        private const float GiftSmashLoudness = 80f;
+        private const float ToyAlarmLoudness = 50f;
+        private const float YowlLoudness = 55f;
+
         private static string ClipFor(in NoiseEvent e)
         {
             switch (e.Source)
             {
                 case NoiseSource.Footstep:
-                    return LocalSurface(e.Emitter) == SurfaceType.Carpet ? AudioClips.FootstepCarpet : AudioClips.FootstepWood;
-                case NoiseSource.Landing: return AudioClips.FootstepWood;
+                    switch (LocalSurface(e.Emitter))
+                    {
+                        case SurfaceType.Carpet: return AudioClips.FootstepCarpet;
+                        case SurfaceType.CreakyWood: return AudioClips.FootstepCreaky;
+                        case SurfaceType.Tile: return AudioClips.FootstepTile;
+                        case SurfaceType.Ice: return AudioClips.FootstepIce;
+                        default: return AudioClips.FootstepWood;
+                    }
+                case NoiseSource.Landing: return AudioClips.Landing;
                 case NoiseSource.CreakyFloor: return AudioClips.Creak;
-                case NoiseSource.GiftImpact: return AudioClips.GiftThud;
-                case NoiseSource.NoisyGift: return AudioClips.ToyTick;
+                case NoiseSource.GiftImpact:
+                    return e.Loudness >= GiftSmashLoudness ? AudioClips.GiftSmash : AudioClips.GiftThud;
+                case NoiseSource.NoisyGift:
+                    return e.Loudness >= ToyAlarmLoudness ? AudioClips.ToyAlarm : AudioClips.ToyTick;
                 case NoiseSource.Jetpack: return AudioClips.Jetpack;
-                case NoiseSource.Cat: return AudioClips.Meow;
+                case NoiseSource.Cat:
+                    return e.Loudness >= YowlLoudness ? AudioClips.Yowl : AudioClips.Meow;
                 case NoiseSource.Object: return AudioClips.Knock;
                 default: return null;
             }
@@ -367,10 +416,39 @@ namespace SilentNight.Audio
             return firstOnly || clips.Length == 1 ? clips[0] : clips[Random.Range(0, clips.Length)];
         }
 
+        /// <summary>
+        /// Lookup order: Resources/&lt;folder&gt;/&lt;name&gt; (+ _1.._N variants) → the parent name's files
+        /// (AudioClips.Parent) → ProceduralSfx synthesized fallback → empty (silent).
+        /// </summary>
         private AudioClip[] LoadClips(string clipName)
         {
             var list = new List<AudioClip>(4);
-            string basePath = string.IsNullOrEmpty(resourcesFolder) ? clipName : resourcesFolder + "/" + clipName;
+            LoadFromResources(clipName, list);
+
+            string parent = list.Count == 0 ? AudioClips.Parent(clipName) : null;
+            if (parent != null) LoadFromResources(parent, list);
+            if (list.Count > 0) return list.ToArray();
+
+            bool allowProcedural = useProceduralFallback && (proceduralMusic || !clipName.StartsWith("music_", System.StringComparison.Ordinal));
+            var procedural = allowProcedural ? ProceduralSfx.GetVariants(clipName) : null;
+            if (procedural != null && procedural.Length > 0)
+            {
+                if (_missingLogged.Add(clipName))
+                    Debug.Log($"[AudioManager] No clip 'Resources/{ResourcePath(clipName)}' — using procedural fallback ({procedural.Length} variants).");
+                return procedural;
+            }
+
+            if (_missingLogged.Add(clipName))
+                Debug.Log($"[AudioManager] No clip 'Resources/{ResourcePath(clipName)}' (or _1.._{maxVariants}) — skipping. See Assets/_Project/Audio/README.md");
+            return list.ToArray();
+        }
+
+        private string ResourcePath(string clipName) =>
+            string.IsNullOrEmpty(resourcesFolder) ? clipName : resourcesFolder + "/" + clipName;
+
+        private void LoadFromResources(string clipName, List<AudioClip> list)
+        {
+            string basePath = ResourcePath(clipName);
             var main = Resources.Load<AudioClip>(basePath);
             if (main != null) list.Add(main);
             for (int i = 1; i <= maxVariants; i++)
@@ -378,9 +456,6 @@ namespace SilentNight.Audio
                 var v = Resources.Load<AudioClip>(basePath + "_" + i);
                 if (v != null) list.Add(v);
             }
-            if (list.Count == 0 && _missingLogged.Add(clipName))
-                Debug.Log($"[AudioManager] No clip 'Resources/{basePath}' (or _1.._{maxVariants}) — skipping. See Assets/_Project/Audio/README.md");
-            return list.ToArray();
         }
     }
 }
