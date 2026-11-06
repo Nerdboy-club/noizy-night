@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Operation: Silent Night — Character & Physics Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-viewport: #111318;
+      --bg-panel: #161920;
+      --bg-panel-elevated: #1c2029;
+      --bg-input: #101217;
+      --border-subtle: #262b36;
+      --border-focus: #3b82f6;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-blue-hover: #2563eb;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-viewport);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+    }
+
+    /* Layout Grid */
+    #app-layout {
+      display: grid;
+      grid-template-rows: 44px 1fr;
+      grid-template-columns: 300px 1fr 320px;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Top Toolbar */
+    #top-toolbar {
+      grid-column: 1 / -1;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      gap: 12px;
+      z-index: 20;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-title {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.16);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+    .rig-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.14);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .rig-badge.warn {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .toolbar-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-right: 4px;
+      font-weight: 600;
+    }
+
+    /* Sidebars */
+    .sidebar {
+      background: var(--bg-panel);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+    }
+    .sidebar::-webkit-scrollbar {
+      width: 5px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: #2d3342;
+      border-radius: 3px;
+    }
+    #left-sidebar {
+      border-right: 1px solid var(--border-subtle);
+    }
+    #right-sidebar {
+      border-left: 1px solid var(--border-subtle);
+    }
+
+    /* Sections */
+    .panel-section {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .section-header {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Buttons & Inputs */
+    .btn {
+      background: var(--bg-panel-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      padding: 5px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #252b37;
+      border-color: #384152;
+    }
+    .btn:active {
+      transform: translateY(1px);
+    }
+    .btn.primary {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn.primary:hover {
+      background: var(--accent-blue-hover);
+    }
+    .btn.emerald {
+      background: rgba(16, 185, 129, 0.16);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
+    }
+    .btn.emerald.active {
+      background: var(--accent-emerald);
+      border-color: var(--accent-emerald);
+      color: #052e16;
+      font-weight: 700;
+    }
+    .btn.amber {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fcd34d;
+    }
+    .btn.amber.active {
+      background: var(--accent-amber);
+      border-color: var(--accent-amber);
+      color: #451a03;
+      font-weight: 700;
+    }
+    .btn.danger {
+      background: rgba(244, 63, 94, 0.14);
+      border-color: rgba(244, 63, 94, 0.35);
+      color: #fda4af;
+    }
+    .btn.danger:hover {
+      background: rgba(244, 63, 94, 0.28);
+    }
+
+    .btn-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5px;
+    }
+
+    select, input[type="text"] {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      padding: 6px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+    }
+    select:focus, input[type="text"]:focus {
+      border-color: var(--border-focus);
+    }
+
+    /* Dropzone */
+    .dropzone {
+      border: 1px dashed #3b4454;
+      background: rgba(16, 18, 23, 0.55);
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-bottom: 8px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+      color: #fff;
+    }
+
+    /* Telemetry Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .stat-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      padding: 5px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stat-card.full {
+      grid-column: 1 / -1;
+    }
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Sliders */
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 8px;
+    }
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .control-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #60a5fa;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 5px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: 3px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    /* Checkboxes */
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .toggle-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .toggle-item input[type="checkbox"] {
+      accent-color: var(--accent-blue);
+      width: 13px;
+      height: 13px;
+      cursor: pointer;
+    }
+
+    /* Center Viewport */
+    #viewport-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: var(--bg-viewport);
+      overflow: hidden;
+    }
+    #playground-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #viewport-hud {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .hud-pill {
+      background: rgba(22, 25, 32, 0.88);
+      border: 1px solid var(--border-subtle);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hud-pill strong {
+      color: #f8fafc;
+    }
+    #grab-indicator {
+      display: none;
+      background: rgba(59, 130, 246, 0.22);
+      border-color: #3b82f6;
+      color: #93c5fd;
+    }
+
+    #drop-overlay {
+      position: absolute;
+      inset: 12px;
+      border: 2px dashed var(--accent-blue);
+      border-radius: 10px;
+      background: rgba(17, 19, 24, 0.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: #60a5fa;
+      pointer-events: none;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-layout">
+    <!-- TOP TOOLBAR -->
+    <header id="top-toolbar">
+      <div class="brand-group">
+        <div class="brand-title">
+          <span>🧝‍♂️ Operation: Silent Night</span>
+          <span class="brand-tag">CHARACTER PLAYGROUND</span>
+        </div>
+        <span class="rig-badge" id="rig-status-badge">Active Ragdoll: 10 Bodies / 10 Joints</span>
+      </div>
+
+      <!-- Camera Presets -->
+      <div class="toolbar-group">
+        <span class="toolbar-label">Camera:</span>
+        <button class="btn" data-cam="front">Front</button>
+        <button class="btn" data-cam="back">Back</button>
+        <button class="btn" data-cam="left">Left</button>
+        <button class="btn" data-cam="right">Right</button>
+        <button class="btn" data-cam="top">Top</button>
+        <button class="btn primary" id="btn-focus-cam" title="Focus on Character (F)">Focus [F]</button>
+      </div>
+
+      <!-- Lighting & Simulation -->
+      <div class="toolbar-group">
+        <span class="toolbar-label">Lighting:</span>
+        <button class="btn primary" id="btn-light-studio">Studio</button>
+        <button class="btn" id="btn-light-outdoor">Outdoor</button>
+        <span style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px;"></span>
+        <button class="btn emerald active" id="btn-sim-toggle">⏸ Pause Sim</button>
+        <button class="btn" id="btn-reset-all" title="Reset Character & Arena (R)">↺ Reset [R]</button>
+        <a href="/index.html" class="btn">← Game</a>
+      </div>
+    </header>
+
+    <!-- LEFT SIDEBAR: MODEL & ANIMATION INSPECTOR -->
+    <aside class="sidebar" id="left-sidebar">
+      <!-- 1. Model Loader -->
+      <div class="panel-section">
+        <div class="section-header">
+          <span>1. Model Loader</span>
+          <span id="model-name-label" style="color: #60a5fa; font-family: 'JetBrains Mono', monospace;">Heist Elf</span>
+        </div>
+
+        <div class="dropzone" id="dropzone-box">
+          📦 Drag & Drop <strong>.GLB / .GLTF</strong> here<br>
+          <span style="font-size: 10px; color: var(--text-muted);">or click to browse local file</span>
+          <input type="file" id="file-input" accept=".glb,.gltf" style="display: none;" />
+        </div>
+
+        <div class="control-row" style="margin-bottom: 8px;">
+          <div class="control-header"><span>Approved Project Models:</span></div>
+          <select id="preset-select">
+            <option value="preset:elf">🧝‍♂️ Heist Elf (Approved 10-Bone Ragdoll)</option>
+            <option value="preset:grandpa">👴 Grumpy Grandpa (Approved 10-Bone Ragdoll)</option>
+            <option value="preset:cat">🐱 Chubby Tabby Cat (Approved Static/Prop)</option>
+            <option value="url:/models/elf.glb">📁 /models/elf.glb (Custom Asset)</option>
+            <option value="url:/models/human.glb">📁 /models/human.glb (Custom Asset)</option>
+            <option value="url:/models/cat.glb">📁 /models/cat.glb (Custom Asset)</option>
+          </select>
+        </div>
+
+        <div class="btn-grid-2">
+          <button class="btn" id="btn-center-model">Center Origin</button>
+          <button class="btn" id="btn-reset-pose">Reset Pose</button>
+        </div>
+      </div>
+
+      <!-- 2. Model Telemetry -->
+      <div class="panel-section">
+        <div class="section-header"><span>Model Telemetry</span></div>
+        <div class="stats-grid">
+          <div class="stat-card full">
+            <span class="stat-label">Dimensions (W × H × D)</span>
+            <span class="stat-val" id="stat-dims">0.00 × 0.00 × 0.00 m</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Triangles</span>
+            <span class="stat-val" id="stat-tris">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Vertices</span>
+            <span class="stat-val" id="stat-verts">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Meshes</span>
+            <span class="stat-val" id="stat-meshes">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Materials</span>
+            <span class="stat-val" id="stat-mats">0</span>
+          </div>
+          <div class="stat-card full">
+            <span class="stat-label">Skeleton Bones</span>
+            <span class="stat-val" id="stat-bones">11 Bones (Humanoid)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Visual & Viewport Controls -->
+      <div class="panel-section">
+        <div class="section-header"><span>Viewport & Visuals</span></div>
+        <div class="toggle-grid" style="margin-bottom: 10px;">
+          <label class="toggle-item"><input type="checkbox" id="chk-floor" checked /> Floor</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-grid" checked /> Grid</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-wireframe" /> Wireframe</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-skeleton" /> Skeleton</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-bbox" /> Bounding Box</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-axes" /> Origin Axes</label>
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Background Color</span>
+            <input type="color" id="inp-bg-color" value="#111318" style="background: none; border: none; width: 22px; height: 18px; cursor: pointer;" />
+          </div>
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Light Intensity</span>
+            <span class="control-val" id="val-light-int">1.6</span>
+          </div>
+          <input type="range" id="rng-light-int" min="0.2" max="3.5" step="0.1" value="1.6" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Rotate Environment Light</span>
+            <span class="control-val" id="val-light-rot">45°</span>
+          </div>
+          <input type="range" id="rng-light-rot" min="0" max="360" step="1" value="45" />
+        </div>
+      </div>
+
+      <!-- 4. Animation Inspector -->
+      <div class="panel-section" style="border-bottom: none;">
+        <div class="section-header">
+          <span>2. Animation Inspector</span>
+          <span id="anim-count-badge" style="color: var(--text-muted);">3 Clips</span>
+        </div>
+
+        <div class="control-row" style="margin-bottom: 8px;">
+          <select id="anim-clip-select"></select>
+        </div>
+
+        <div class="btn-grid-3" style="margin-bottom: 8px;">
+          <button class="btn primary" id="btn-anim-play">▶ Play</button>
+          <button class="btn" id="btn-anim-pause">⏸ Pause</button>
+          <button class="btn" id="btn-anim-stop">⏹ Stop</button>
+        </div>
+
+        <div class="btn-grid-2" style="margin-bottom: 10px;">
+          <button class="btn" id="btn-bind-pose">Bind Pose</button>
+          <button class="btn" id="btn-anim-pose">Animated Pose</button>
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Playback Speed</span>
+            <span class="control-val" id="val-anim-speed">1.0x</span>
+          </div>
+          <input type="range" id="rng-anim-speed" min="0.1" max="2.5" step="0.1" value="1.0" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Timeline Scrubber</span>
+            <span class="control-val" id="val-anim-time">0.00s / 1.00s</span>
+          </div>
+          <input type="range" id="rng-anim-scrub" min="0" max="100" step="0.5" value="0" />
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER 3D VIEWPORT -->
+    <main id="viewport-container">
+      <canvas id="playground-canvas"></canvas>
+      <div id="drop-overlay">Drop .GLB / .GLTF Model to Load</div>
+
+      <div id="viewport-hud">
+        <div class="hud-pill" id="grab-indicator">
+          <span>✋ Grabbing: <strong id="grab-part-name">Head</strong></span>
+        </div>
+        <div class="hud-pill">
+          <span>🖱️ <strong>LMB Drag Limb:</strong> Pull / Lift / Throw</span>
+          <span>•</span>
+          <span>⌨️ <strong>WASD + Shift + Space:</strong> Test Active Ragdoll Walk</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR: PHYSICS, FORCES & DEBUG -->
+    <aside class="sidebar" id="right-sidebar">
+      <!-- 1. Interactive Controls -->
+      <div class="panel-section">
+        <div class="section-header"><span>3 & 4. Interactive Ragdoll Controls</span></div>
+
+        <div class="btn-grid-2" style="margin-bottom: 8px;">
+          <button class="btn emerald active" id="btn-mode-active">Active Ragdoll</button>
+          <button class="btn amber" id="btn-mode-ragdoll">Pure Ragdoll</button>
+        </div>
+
+        <div class="btn-grid-3" style="margin-bottom: 6px;">
+          <button class="btn" id="btn-act-push">💥 Push</button>
+          <button class="btn danger" id="btn-act-knock">🦵 Knock Down</button>
+          <button class="btn primary" id="btn-act-throw">🚀 Throw</button>
+        </div>
+
+        <div class="btn-grid-2" style="margin-bottom: 10px;">
+          <button class="btn emerald" id="btn-act-stand">⬆️ Stand Up</button>
+          <button class="btn" id="btn-act-reset">↺ Reset Char</button>
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Force / Mouse Pull Strength</span>
+            <span class="control-val" id="val-force-str">18.0</span>
+          </div>
+          <input type="range" id="rng-force-str" min="2" max="50" step="1" value="18" />
+        </div>
+      </div>
+
+      <!-- 2. Physics Environment & Ragdoll Parameters -->
+      <div class="panel-section">
+        <div class="section-header"><span>5. Physics & Balance Tuning</span></div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Gravity (Y)</span>
+            <span class="control-val" id="val-gravity">-18.0 m/s²</span>
+          </div>
+          <input type="range" id="rng-gravity" min="-30" max="0" step="0.5" value="-18.0" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Character Mass Scale</span>
+            <span class="control-val" id="val-mass">1.0x</span>
+          </div>
+          <input type="range" id="rng-mass" min="0.3" max="3.0" step="0.1" value="1.0" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Surface Friction</span>
+            <span class="control-val" id="val-friction">0.60</span>
+          </div>
+          <input type="range" id="rng-friction" min="0.0" max="1.5" step="0.05" value="0.60" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Bounciness (Restitution)</span>
+            <span class="control-val" id="val-bounce">0.10</span>
+          </div>
+          <input type="range" id="rng-bounce" min="0.0" max="1.0" step="0.05" value="0.10" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Joint Stiffness (Motors)</span>
+            <span class="control-val" id="val-stiffness">65.0</span>
+          </div>
+          <input type="range" id="rng-stiffness" min="5" max="150" step="1" value="65" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Joint Damping</span>
+            <span class="control-val" id="val-damping">8.5</span>
+          </div>
+          <input type="range" id="rng-damping" min="0.5" max="25" step="0.5" value="8.5" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>Upright Balance Strength</span>
+            <span class="control-val" id="val-balance">75.0</span>
+          </div>
+          <input type="range" id="rng-balance" min="0" max="150" step="1" value="75" />
+        </div>
+
+        <div class="control-row">
+          <div class="control-header">
+            <span>WASD Movement Force</span>
+            <span class="control-val" id="val-moveforce">42.0</span>
+          </div>
+          <input type="range" id="rng-moveforce" min="10" max="100" step="1" value="42" />
+        </div>
+      </div>
+
+      <!-- 3. Debug Telemetry & Visual Overlays -->
+      <div class="panel-section" style="border-bottom: none;">
+        <div class="section-header"><span>6. Live Debug & Vector Overlays</span></div>
+
+        <div class="toggle-grid" style="margin-bottom: 10px;">
+          <label class="toggle-item"><input type="checkbox" id="chk-dbg-colliders" /> Collision Shapes</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-dbg-joints" /> Joint Links</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-dbg-com" checked /> Center of Mass</label>
+          <label class="toggle-item"><input type="checkbox" id="chk-dbg-vel" /> Velocity Vec</label>
+          <label class="toggle-item" style="grid-column: 1 / -1;"><input type="checkbox" id="chk-dbg-force" checked /> Force / Pull Vectors</label>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-label">FPS</span>
+            <span class="stat-val" id="dbg-fps" style="color: #34d399;">60</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Physics Rate</span>
+            <span class="stat-val" id="dbg-phys-rate">60 Hz</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Rigid Bodies</span>
+            <span class="stat-val" id="dbg-bodies">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Joints</span>
+            <span class="stat-val" id="dbg-joints">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Velocity</span>
+            <span class="stat-val" id="dbg-vel">0.00 m/s</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Collisions</span>
+            <span class="stat-val" id="dbg-cols">0</span>
+          </div>
+          <div class="stat-card full">
+            <span class="stat-label">Position (X, Y, Z)</span>
+            <span class="stat-val" id="dbg-pos">0.00, 0.00, 0.00</span>
+          </div>
+          <div class="stat-card full">
+            <span class="stat-label">Movement State</span>
+            <span class="stat-val" id="dbg-move-state" style="color: #60a5fa;">IDLE</span>
+          </div>
+          <div class="stat-card full">
+            <span class="stat-label">Balance State</span>
+            <span class="stat-val" id="dbg-bal-state" style="color: #34d399;">BALANCED (100%)</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="/playground/main.ts"></script>
+</body>
+</html>
