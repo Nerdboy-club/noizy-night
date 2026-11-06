@@ -199,6 +199,10 @@ namespace SilentNight.Stealth
 
         private void Build()
         {
+#if UNITY_EDITOR
+            if (modelPrefab == null && kind == NPCKind.Cat)
+                modelPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Characters/Cat/Cat.fbx");
+#endif
             Transform old = transform.Find("Model");
             if (old != null && old != ModelRoot) Destroy(old.gameObject);
 
@@ -218,6 +222,10 @@ namespace SilentNight.Stealth
                 Head = FindDeep(inst.transform, headTransformName);
                 Tail = FindDeep(inst.transform, tailTransformName);
                 if (animator == null) animator = inst.GetComponentInChildren<Animator>();
+#if UNITY_EDITOR
+                if (animator != null && animator.runtimeAnimatorController == null && kind == NPCKind.Cat)
+                    animator.runtimeAnimatorController = UnityEditor.AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/_Project/Art/Characters/Cat/Cat.controller");
+#endif
             }
             else
             {

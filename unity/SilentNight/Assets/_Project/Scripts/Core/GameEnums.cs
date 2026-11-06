@@ -6,6 +6,7 @@ namespace SilentNight.Core
         Boot,
         MainMenu,
         Hub,          // Santa's workshop: pick order, load gifts, upgrade
+        Rooftop,      // city rooftops: find the right chimney
         Delivery,     // inside a house
         Results,      // delivery summary screen
         GameOver,     // caught by grandpa

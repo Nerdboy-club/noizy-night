@@ -188,7 +188,8 @@ namespace SilentNight.Audio
             float duck = _paused ? pausedMusicDuck : 1f;
             for (int i = 0; i < 2; i++)
             {
-                var src = _music[i];
+                var src = _music != null ? _music[i] : null;
+                if (src == null) continue; // sources not created yet (or destroyed on scene change)
                 _musicWeight[i] = Mathf.MoveTowards(_musicWeight[i], _musicTarget[i], step);
                 src.volume = _musicWeight[i] * musicVolume * masterVolume * duck;
                 if (_musicWeight[i] <= 0f && _musicTarget[i] <= 0f && src.isPlaying) src.Stop();

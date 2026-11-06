@@ -15,10 +15,10 @@ namespace SilentNight.Player
     public class ElfController : MonoBehaviour, IPlayerStatus
     {
         [Header("Speeds (m/s)")]
-        [SerializeField] private float walkSpeed = 4.2f;
-        [SerializeField] private float sprintSpeed = 6.4f;
-        [SerializeField] private float crouchSpeed = 2.4f;
-        [SerializeField] private float groundAcceleration = 30f;
+        [SerializeField] private float walkSpeed = 2.5f;
+        [SerializeField] private float sprintSpeed = 3.8f;
+        [SerializeField] private float crouchSpeed = 1.4f;
+        [SerializeField] private float groundAcceleration = 22f;
         [SerializeField] private float airAcceleration = 9f;
         [Tooltip("Acceleration factor on a fully slippery surface (Slipperiness = 1).")]
         [SerializeField] private float slipperyAccelerationFactor = 0.08f;
@@ -30,7 +30,7 @@ namespace SilentNight.Player
         [Header("Jump & gravity")]
         [SerializeField] private float gravity = -20f;
         [SerializeField] private float maxFallSpeed = 30f;
-        [SerializeField] private float jumpHeight = 1.2f;
+        [SerializeField] private float jumpHeight = 0.7f;
         [Tooltip("Jump height factor when carrying something heavy (SpeedMultiplier < 0.5). 4.8/7.6 in the prototype.")]
         [SerializeField] private float heavyJumpFactor = 0.63f;
         [SerializeField] private float coyoteTime = 0.12f;
@@ -38,8 +38,8 @@ namespace SilentNight.Player
         [SerializeField] private float groundedStickVelocity = -2f;
 
         [Header("Crouch")]
-        [SerializeField] private float standHeight = 1.1f;
-        [SerializeField] private float crouchHeight = 0.75f;
+        [SerializeField] private float standHeight = 1.1f * 0.55f;
+        [SerializeField] private float crouchHeight = 0.75f * 0.55f;
         [SerializeField] private float crouchTransitionSpeed = 8f;
 
         [Header("Stamina (0..100)")]
@@ -57,14 +57,14 @@ namespace SilentNight.Player
         [SerializeField] private float jetpackMinBurn = 8f;
         [SerializeField] private float jetpackBaseRefuel = 6f;
         [SerializeField] private float jetpackRefuelPerLevel = 2f;
-        [SerializeField] private float jetpackBaseThrustVelocity = 5.2f;
-        [SerializeField] private float jetpackThrustPerLevel = 0.6f;
+        [SerializeField] private float jetpackBaseThrustVelocity = 3.4f;
+        [SerializeField] private float jetpackThrustPerLevel = 0.4f;
         [SerializeField] private float jetpackResponsiveness = 8f;
         [SerializeField] private float jetpackNoiseInterval = 0.3f;
 
         [Header("Ground probe")]
         [SerializeField] private LayerMask groundMask = ~0;
-        [SerializeField] private float groundProbeDistance = 0.3f;
+        [SerializeField] private float groundProbeDistance = 0.17f;
 
         [Header("Noise")]
         [SerializeField] private float stepIntervalWalk = 0.42f;
@@ -122,6 +122,8 @@ namespace SilentNight.Player
         public event Action<float> Footstep;
 
         // ---------------- public read API ----------------
+        /// <summary>Set by ElfRagdoll while the elf is limp: ignores movement input.</summary>
+        public bool InputLocked { get; set; }
         public Vector3 Velocity => _planarVelocity + Vector3.up * _verticalVelocity;
         public float PlanarSpeed => _planarVelocity.magnitude;
         public float VerticalSpeed => _verticalVelocity;
@@ -197,7 +199,7 @@ namespace SilentNight.Player
         }
 
         /// <summary>Move the elf instantly (CharacterController must be disabled while setting the transform).</summary>
-        public void Teleport(Vector3 position, Quaternion rotation)
+        public void Teleport(Vector3 position, Quaternion rotation, bool notify = true)
         {
             if (_cc == null) _cc = GetComponent<CharacterController>();
             bool wasEnabled = _cc.enabled;
@@ -212,7 +214,7 @@ namespace SilentNight.Player
             _coyoteTimer = 0f;
             _jumpBufferTimer = 0f;
             _grounded = false;
-            Teleported?.Invoke();
+            if (notify) Teleported?.Invoke();
         }
 
         // ======================================================================
@@ -229,7 +231,7 @@ namespace SilentNight.Player
             if (dt <= 0f || !_cc.enabled) return; // paused (timeScale 0) or controller disabled
             CacheSiblings();
 
-            bool canControl = PlayerGate.CanControl;
+            bool canControl = PlayerGate.CanControl && !InputLocked;
             Vector2 moveInput = canControl ? _input.Move : Vector2.zero;
             bool wantsMove = moveInput.sqrMagnitude > 0.0001f;
             float carryMul = _carry != null ? _carry.SpeedMultiplier : 1f;

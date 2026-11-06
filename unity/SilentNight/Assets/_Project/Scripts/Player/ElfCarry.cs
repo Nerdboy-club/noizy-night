@@ -17,11 +17,11 @@ namespace SilentNight.Player
         [SerializeField] private Transform sackAnchor;
 
         [Header("Hold positions (local to the elf root)")]
-        [SerializeField] private Vector3 smallHoldLocalPosition = new Vector3(0f, 0.55f, 0.45f);
-        [SerializeField] private Vector3 hugeHoldLocalPosition = new Vector3(0f, 0.68f, 0.85f);
+        [SerializeField] private Vector3 smallHoldLocalPosition = new Vector3(0f, 0.3f, 0.26f);
+        [SerializeField] private Vector3 hugeHoldLocalPosition = new Vector3(0f, 0.4f, 0.5f);
 
         [Header("Drop")]
-        [SerializeField] private float dropForwardSpeed = 2.2f;
+        [SerializeField] private float dropForwardSpeed = 1.6f;
         [SerializeField] private float dropUpSpeed = 1.2f;
         [SerializeField] private float inheritVelocity = 0.5f;
 

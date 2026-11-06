@@ -14,7 +14,7 @@ namespace SilentNight.Player
                 GameFlow f = GameServices.Flow;
                 if (GameServices.UIModalOpen) return false;
                 if (f == null) return true;
-                return f.State == GameState.Hub || f.State == GameState.Delivery;
+                return f.State == GameState.Hub || f.State == GameState.Delivery || f.State == GameState.Rooftop;
             }
         }
 

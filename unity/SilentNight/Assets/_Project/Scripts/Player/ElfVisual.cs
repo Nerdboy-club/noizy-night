@@ -15,8 +15,8 @@ namespace SilentNight.Player
     {
         [SerializeField] private GameObject modelPrefab;
         [Range(0, 3)] [SerializeField] private int themeIndex;
-        [SerializeField] private Vector3 holdPointLocal = new Vector3(0f, 0.55f, 0.45f);
-        [SerializeField] private Vector3 sackAnchorLocal = new Vector3(0f, 0.5f, -0.3f);
+        [SerializeField] private Vector3 holdPointLocal = new Vector3(0f, 0.3f, 0.26f);
+        [SerializeField] private Vector3 sackAnchorLocal = new Vector3(0f, 0.28f, -0.17f);
         [SerializeField] private float crouchVisualScaleY = 0.7f;
         [SerializeField] private float crouchLerpSpeed = 10f;
 
@@ -79,6 +79,18 @@ namespace SilentNight.Player
         {
             get => modelPrefab;
             set => modelPrefab = value; // takes effect on next Awake/Build
+        }
+
+        /// <summary>Hides/shows the placeholder or model body (gadgets such as the jetpack stay). Used by ElfRagdoll.</summary>
+        public void SetBodyVisible(bool visible)
+        {
+            if (_visualRoot == null) return;
+            for (int i = 0; i < _visualRoot.childCount; i++)
+            {
+                Transform ch = _visualRoot.GetChild(i);
+                if (ch == _jetpackVisual) continue;
+                ch.gameObject.SetActive(visible);
+            }
         }
 
         // ---------------- anchors ----------------
@@ -225,7 +237,8 @@ namespace SilentNight.Player
             var jp = new GameObject("JetpackVisual");
             _jetpackVisual = jp.transform;
             _jetpackVisual.SetParent(_visualRoot, false);
-            _jetpackVisual.localPosition = new Vector3(0f, 0.5f, -0.24f);
+            _jetpackVisual.localPosition = new Vector3(0f, 0.28f, -0.14f);
+            _jetpackVisual.localScale = Vector3.one * 0.55f;
             Material metal = CreateMaterial(MetalColor);
             Material flame = CreateMaterial(FlameColor);
             Renderer t1 = Part(PrimitiveType.Cylinder, "TankL", Vector3.zero, new Vector3(0.1f, 0.14f, 0.1f), Vector3.zero, metal);
@@ -312,7 +325,7 @@ namespace SilentNight.Player
                 int count = _carry != null ? _carry.SackCount : 0;
                 bool show = count > 0;
                 if (_sackVisual.gameObject.activeSelf != show) _sackVisual.gameObject.SetActive(show);
-                if (show) _sackVisual.localScale = Vector3.one * (0.26f + 0.05f * Mathf.Min(count, 6));
+                if (show) _sackVisual.localScale = Vector3.one * (0.26f + 0.05f * Mathf.Min(count, 6)) * 0.55f;
             }
 
             // Jetpack

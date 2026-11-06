@@ -51,6 +51,10 @@ namespace SilentNight.Core
         public static event Action<Order> RequestStartDelivery;
         public static void RaiseRequestStartDelivery(Order o) => RequestStartDelivery?.Invoke(o);
 
+        /// <summary>Elf dives into the correct chimney on the rooftops: load the house.</summary>
+        public static event Action RequestEnterHouse;
+        public static void RaiseRequestEnterHouse() => RequestEnterHouse?.Invoke();
+
         public static event Action RequestReturnToHub;
         public static void RaiseRequestReturnToHub() => RequestReturnToHub?.Invoke();
 
@@ -63,7 +67,7 @@ namespace SilentNight.Core
         {
             Noise = null; StateChanged = null; GrandpaAlertChanged = null; GiftDelivered = null;
             GiftLoaded = null; GiftDamaged = null; Objective = null; Toast = null; PlayerCaught = null;
-            DeliveryCompleted = null; RequestStartDelivery = null; RequestReturnToHub = null; RequestHubPanel = null;
+            DeliveryCompleted = null; RequestStartDelivery = null; RequestEnterHouse = null; RequestReturnToHub = null; RequestHubPanel = null;
         }
     }
 }

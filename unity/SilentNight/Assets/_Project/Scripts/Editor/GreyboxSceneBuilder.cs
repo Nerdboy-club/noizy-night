@@ -29,6 +29,7 @@ namespace SilentNight.EditorTools
         private const string BootPath = ScenesFolder + "/Boot.unity";
         private const string HubPath = ScenesFolder + "/Hub.unity";
         private const string HousePath = ScenesFolder + "/House.unity";
+        private const string RooftopPath = ScenesFolder + "/Rooftop.unity";
         private const string HouseNavMeshFolder = ScenesFolder + "/House";
         private const string HouseNavMeshPath = HouseNavMeshFolder + "/NavMesh-House.asset";
         private const string LightingSettingsPath = ProjectBootstrap.SettingsFolder + "/SilentNight_Lighting.lighting";
@@ -64,6 +65,8 @@ namespace SilentNight.EditorTools
                 BuildBoot(panelSettings);
                 EditorUtility.DisplayProgressBar("Silent Night", "Building Hub scene…", 0.35f);
                 BuildHub(lighting);
+                EditorUtility.DisplayProgressBar("Silent Night", "Building Rooftop scene…", 0.5f);
+                BuildRooftop(lighting);
                 EditorUtility.DisplayProgressBar("Silent Night", "Building House scene + NavMesh…", 0.65f);
                 BuildHouse(lighting);
             }
@@ -76,11 +79,12 @@ namespace SilentNight.EditorTools
             {
                 new EditorBuildSettingsScene(BootPath, true),
                 new EditorBuildSettingsScene(HubPath, true),
+                new EditorBuildSettingsScene(RooftopPath, true),
                 new EditorBuildSettingsScene(HousePath, true),
             };
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene(BootPath, OpenSceneMode.Single);
-            Debug.Log("[Silent Night] Greybox scenes built: Boot, Hub, House (Build Settings updated). Open Boot and press Play.");
+            Debug.Log("[Silent Night] Greybox scenes built: Boot, Hub, Rooftop, House (Build Settings updated). Open Boot and press Play.");
         }
 
         // ------------------------------------------------------------------ Boot
@@ -102,6 +106,7 @@ namespace SilentNight.EditorTools
 
         private static void BuildHub(LightingSettings lighting)
         {
+            _texCache.Clear();
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             Lightmapping.lightingSettings = lighting;
 
@@ -115,108 +120,298 @@ namespace SilentNight.EditorTools
             Transform env = new GameObject("Environment").transform;
 
             // Floor, rug, snow outside.
-            Floor(env, "Floor", -12f, 12f, -12f, 12f, ProjectBootstrap.MatWood, SurfaceType.Wood);
-            Patch(env, "Rug", new Vector3(0f, 0f, 0.5f), new Vector2(7.5f, 7.5f), ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
+            Floor(env, "Floor", -8f, 8f, -8f, 8f, ProjectBootstrap.MatWood, SurfaceType.Wood);
+            Patch(env, "Rug", new Vector3(0f, 0f, 0.5f), new Vector2(6f, 6f), ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
             Box(env, "SnowGround", new Vector3(0f, -0.25f, 0f), new Vector3(80f, 0.3f, 80f), ProjectBootstrap.MatSnow);
 
             // Walls (5 m brick) + dark wainscot.
-            const float h = 5f, t = 0.4f;
-            WallAlongX(env, "WallN", 12f, -12.2f, 12.2f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongX(env, "WallS", -12f, -12.2f, 12.2f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongZ(env, "WallW", -12f, -12f, 12f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongZ(env, "WallE", 12f, -12f, 12f, h, t, ProjectBootstrap.MatBrick);
-            Box(env, "WainscotN", new Vector3(0f, 0.575f, 11.77f), new Vector3(23.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotS", new Vector3(0f, 0.575f, -11.77f), new Vector3(23.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotW", new Vector3(-11.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 23.6f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotE", new Vector3(11.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 23.6f), ProjectBootstrap.MatDarkWood, false);
+            const float h = 4f, t = 0.4f;
+            WallAlongX(env, "WallN", 8f, -8.2f, 8.2f, h, t, ProjectBootstrap.MatBrick);
+            WallAlongX(env, "WallS", -8f, -8.2f, 8.2f, h, t, ProjectBootstrap.MatBrick);
+            WallAlongZ(env, "WallW", -8f, -8f, 8f, h, t, ProjectBootstrap.MatBrick);
+            WallAlongZ(env, "WallE", 8f, -8f, 8f, h, t, ProjectBootstrap.MatBrick);
+            Box(env, "WainscotN", new Vector3(0f, 0.575f, 7.77f), new Vector3(15.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
+            Box(env, "WainscotS", new Vector3(0f, 0.575f, -7.77f), new Vector3(15.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
+            Box(env, "WainscotW", new Vector3(-7.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 15.6f), ProjectBootstrap.MatDarkWood, false);
+            Box(env, "WainscotE", new Vector3(7.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 15.6f), ProjectBootstrap.MatDarkWood, false);
 
             // Decor: shelves with parcels, crates, a tree, a fireplace, hanging lanterns.
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 2; i++)
             {
-                float z = -8f + i * 3.4f;
-                Box(env, "ShelfW" + i, new Vector3(-11.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
-                Box(env, "ShelfE" + i, new Vector3(11.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
+                float z = -3.6f + i * 3.4f;
+                Box(env, "ShelfW" + i, new Vector3(-7.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
+                Box(env, "ShelfE" + i, new Vector3(7.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
                 for (int k = 0; k < 3; k++)
                 {
                     string m = k == 0 ? ProjectBootstrap.MatRed : (k == 1 ? ProjectBootstrap.MatGreen : ProjectBootstrap.MatGold);
-                    Box(env, "ParcelW", new Vector3(-11.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
-                    Box(env, "ParcelE", new Vector3(11.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
+                    Box(env, "ParcelW", new Vector3(-7.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
+                    Box(env, "ParcelE", new Vector3(7.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
                 }
             }
-            Box(env, "Crate1", new Vector3(-10.2f, 0.4f, -10.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatWood);
-            Box(env, "Crate2", new Vector3(-9.3f, 0.35f, -10.5f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatWood, true, 20f);
-            Box(env, "Crate3", new Vector3(-10.1f, 1.15f, -10.4f), new Vector3(0.6f, 0.7f, 0.6f), ProjectBootstrap.MatRed, true, 10f);
-            Box(env, "Crate4", new Vector3(10.3f, 0.4f, -10.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatGreen);
-            BuildTree(env, new Vector3(9.6f, 0f, 9.6f), 1.2f);
-            BuildFireplaceNorth(env, new Vector3(-7.5f, 0f, 11.8f)); // emissive embers only: hub keeps max 3 point lights
+            Box(env, "Crate1", new Vector3(-6.2f, 0.4f, -6.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatWood);
+            Box(env, "Crate2", new Vector3(-5.3f, 0.35f, -6.5f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatWood, true, 20f);
+            Box(env, "Crate3", new Vector3(-6.1f, 1.15f, -6.4f), new Vector3(0.6f, 0.7f, 0.6f), ProjectBootstrap.MatRed, true, 10f);
+            Box(env, "Crate4", new Vector3(6.3f, 0.4f, -6.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatGreen);
+            BuildTree(env, new Vector3(6f, 0f, 6f), 1.0f);
+            BuildFireplaceNorth(env, new Vector3(-5f, 0f, 7.8f)); // emissive embers only: hub keeps max 3 point lights
             float[] lx = { -2.5f, 2.5f }, lz = { -2f, 2.5f };
             foreach (float x in lx)
                 foreach (float z in lz)
                 {
-                    Box(env, "LanternCord", new Vector3(x, 4.4f, z), new Vector3(0.02f, 1.2f, 0.02f), ProjectBootstrap.MatDark, false);
-                    Ball(env, "Lantern", new Vector3(x, 3.7f, z), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
+                    Box(env, "LanternCord", new Vector3(x, 3.4f, z), new Vector3(0.02f, 1.2f, 0.02f), ProjectBootstrap.MatDark, false);
+                    Ball(env, "Lantern", new Vector3(x, 2.8f, z), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
                 }
 
             // Conveyor: Conveyor builds its own belt at runtime (no renderers here). Belt runs along -Z towards the sleigh.
             var conveyor = new GameObject("Conveyor");
-            conveyor.transform.SetPositionAndRotation(new Vector3(-7.5f, 0f, 1.5f), Quaternion.Euler(0f, 180f, 0f));
+            conveyor.transform.SetPositionAndRotation(new Vector3(-5.2f, 0f, 3f), Quaternion.Euler(0f, 180f, 0f));
             conveyor.AddComponent<Conveyor>();
-            Box(env, "ChuteHood", new Vector3(-7.5f, 2.7f, 4.6f), new Vector3(1.8f, 0.25f, 1.4f), ProjectBootstrap.MatMetal, false);
-            Box(env, "ChutePostL", new Vector3(-8.5f, 1.35f, 5.1f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
-            Box(env, "ChutePostR", new Vector3(-6.5f, 1.35f, 5.1f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
+            Box(env, "ChuteHood", new Vector3(-5.2f, 2.7f, 6.1f), new Vector3(1.8f, 0.25f, 1.4f), ProjectBootstrap.MatMetal, false);
+            Box(env, "ChutePostL", new Vector3(-6.2f, 1.35f, 6.6f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
+            Box(env, "ChutePostR", new Vector3(-4.2f, 1.35f, 6.6f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
 
             // Order board on the north wall.
             var board = new GameObject("OrderBoard");
-            board.transform.position = new Vector3(0f, 0f, 11.1f);
+            board.transform.position = new Vector3(0f, 0f, 7.1f);
             board.AddComponent<OrderBoardStation>();
-            Box(board.transform, "Board", new Vector3(0f, 1.9f, 11.7f), new Vector3(3f, 1.8f, 0.12f), ProjectBootstrap.MatDarkWood);
-            Box(board.transform, "BoardFrame", new Vector3(0f, 2.86f, 11.66f), new Vector3(3.2f, 0.12f, 0.16f), ProjectBootstrap.MatGold, false);
+            Box(board.transform, "Board", new Vector3(0f, 1.9f, 7.7f), new Vector3(3f, 1.8f, 0.12f), ProjectBootstrap.MatDarkWood);
+            Box(board.transform, "BoardFrame", new Vector3(0f, 2.86f, 7.66f), new Vector3(3.2f, 0.12f, 0.16f), ProjectBootstrap.MatGold, false);
             for (int i = 0; i < 3; i++)
-                Box(board.transform, "OrderNote" + i, new Vector3(-0.95f + i * 0.95f, 1.9f, 11.63f), new Vector3(0.65f, 0.85f, 0.02f), ProjectBootstrap.MatPaper, false);
+                Box(board.transform, "OrderNote" + i, new Vector3(-0.95f + i * 0.95f, 1.9f, 7.63f), new Vector3(0.65f, 0.85f, 0.02f), ProjectBootstrap.MatPaper, false);
             MakeStaticChildren(board);
 
             // Workbench (upgrades).
             var bench = new GameObject("Workbench");
-            bench.transform.position = new Vector3(7.5f, 0f, 1.5f);
+            bench.transform.position = new Vector3(5.2f, 0f, 1.5f);
             bench.AddComponent<WorkbenchStation>();
-            Box(bench.transform, "BenchTop", new Vector3(7.5f, 0.9f, 1.5f), new Vector3(1.2f, 0.1f, 2.6f), ProjectBootstrap.MatWood);
-            foreach (float dx in new[] { -0.5f, 0.5f })
-                foreach (float dz in new[] { -1.15f, 1.15f })
-                    Box(bench.transform, "BenchLeg", new Vector3(7.5f + dx, 0.425f, 1.5f + dz), new Vector3(0.1f, 0.85f, 0.1f), ProjectBootstrap.MatDarkWood);
-            Box(bench.transform, "DemoJetpack", new Vector3(7.5f, 1.2f, 0.8f), new Vector3(0.45f, 0.5f, 0.3f), ProjectBootstrap.MatMetal, false);
-            Box(bench.transform, "DemoBoot", new Vector3(7.5f, 1.05f, 2.2f), new Vector3(0.25f, 0.2f, 0.4f), ProjectBootstrap.MatRed, false);
-            Box(bench.transform, "ToolRack", new Vector3(8.2f, 1.6f, 1.5f), new Vector3(0.08f, 1.2f, 2.4f), ProjectBootstrap.MatDarkWood, false);
+            GameObject benchModel = Model(bench.transform, "Hub/Workbench.fbx", "WorkbenchModel", new Vector3(5.2f, 0f, 1.5f), -90f, 1.3f);
+            if (benchModel != null)
+            {
+                Bounds bb = BoundsOf(benchModel);
+                var col = bench.AddComponent<BoxCollider>();
+                col.center = bench.transform.InverseTransformPoint(bb.center);
+                col.size = bb.size;
+            }
+            else
+            {
+                Box(bench.transform, "BenchTop", new Vector3(5.2f, 0.9f, 1.5f), new Vector3(1.2f, 0.1f, 2.6f), ProjectBootstrap.MatWood);
+                foreach (float dx in new[] { -0.5f, 0.5f })
+                    foreach (float dz in new[] { -1.15f, 1.15f })
+                        Box(bench.transform, "BenchLeg", new Vector3(5.2f + dx, 0.425f, 1.5f + dz), new Vector3(0.1f, 0.85f, 0.1f), ProjectBootstrap.MatDarkWood);
+                Box(bench.transform, "DemoJetpack", new Vector3(5.2f, 1.2f, 0.8f), new Vector3(0.45f, 0.5f, 0.3f), ProjectBootstrap.MatMetal, false);
+                Box(bench.transform, "DemoBoot", new Vector3(5.2f, 1.05f, 2.2f), new Vector3(0.25f, 0.2f, 0.4f), ProjectBootstrap.MatRed, false);
+                Box(bench.transform, "ToolRack", new Vector3(5.9f, 1.6f, 1.5f), new Vector3(0.08f, 1.2f, 2.4f), ProjectBootstrap.MatDarkWood, false);
+            }
             MakeStaticChildren(bench);
 
             // Sleigh with launch pad.
             var sleigh = new GameObject("Sleigh");
-            sleigh.transform.position = new Vector3(0f, 0f, -7f);
+            sleigh.transform.position = new Vector3(0f, 0f, -4.8f);
             sleigh.AddComponent<SleighLoadZone>();
-            Box(sleigh.transform, "RunnerL", new Vector3(-0.75f, 0.08f, -7f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "RunnerR", new Vector3(0.75f, 0.08f, -7f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "Body", new Vector3(0f, 0.65f, -7f), new Vector3(1.7f, 0.8f, 2.8f), ProjectBootstrap.MatRed);
-            Box(sleigh.transform, "SeatBack", new Vector3(0f, 1.25f, -8.25f), new Vector3(1.7f, 0.7f, 0.3f), ProjectBootstrap.MatRed);
-            Box(sleigh.transform, "FrontCurl", new Vector3(0f, 0.75f, -5.45f), new Vector3(1.7f, 0.6f, 0.2f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "SackDecor", new Vector3(0f, 1.25f, -7.5f), new Vector3(1.0f, 0.6f, 0.9f), ProjectBootstrap.MatFabric, false);
-            Disc(env, "LaunchPad", new Vector3(0f, 0.012f, -7f), 4.4f, 0.02f, ProjectBootstrap.MatGold, false);
+            Box(sleigh.transform, "RunnerL", new Vector3(-0.75f, 0.08f, -4.8f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
+            Box(sleigh.transform, "RunnerR", new Vector3(0.75f, 0.08f, -4.8f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
+            Box(sleigh.transform, "Body", new Vector3(0f, 0.65f, -4.8f), new Vector3(1.7f, 0.8f, 2.8f), ProjectBootstrap.MatRed);
+            Box(sleigh.transform, "SeatBack", new Vector3(0f, 1.25f, -6.05f), new Vector3(1.7f, 0.7f, 0.3f), ProjectBootstrap.MatRed);
+            Box(sleigh.transform, "FrontCurl", new Vector3(0f, 0.75f, -3.25f), new Vector3(1.7f, 0.6f, 0.2f), ProjectBootstrap.MatGold);
+            Box(sleigh.transform, "SackDecor", new Vector3(0f, 1.25f, -5.3f), new Vector3(1.0f, 0.6f, 0.9f), ProjectBootstrap.MatFabric, false);
+            Disc(env, "LaunchPad", new Vector3(0f, 0.012f, -4.8f), 4.4f, 0.02f, ProjectBootstrap.MatGold, false);
             MakeStaticChildren(sleigh);
 
             // Lights: max 3 point lights, no shadows.
-            Point(env, "ConveyorLight", new Vector3(-7.5f, 3.4f, 1.5f), new Color(1f, 0.72f, 0.4f), 6f, 11f);
-            Point(env, "WorkbenchLight", new Vector3(7.5f, 3.4f, 1.5f), new Color(0.65f, 0.85f, 1f), 5f, 10f);
-            Point(env, "SleighLight", new Vector3(0f, 3.8f, -4f), new Color(1f, 0.78f, 0.5f), 7f, 13f);
+            Point(env, "ConveyorLight", new Vector3(-5.2f, 3.0f, 3f), new Color(1f, 0.72f, 0.4f), 6f, 11f);
+            Point(env, "WorkbenchLight", new Vector3(5.2f, 3.0f, 1.5f), new Color(0.65f, 0.85f, 1f), 5f, 10f);
+            Point(env, "SleighLight", new Vector3(0f, 3.2f, -2.5f), new Color(1f, 0.78f, 0.5f), 7f, 13f);
 
             // Player.
-            CreateSpawnAndPlayer(new Vector3(0f, 0f, -2.5f), Quaternion.identity);
+            CreateSpawnAndPlayer(new Vector3(0f, 0f, 0.5f), Quaternion.identity);
 
             MakeStatic(env.gameObject);
             SaveAndBake(scene, HubPath);
+        }
+
+
+        // ------------------------------------------------------------------ Rooftop
+
+        /// <summary>City rooftops: a grid of snowy roofs separated by small gaps, ice patches, one chimney per roof.
+        /// The right chimney (order address) is picked at runtime by RooftopLevelController.</summary>
+        private static void BuildRooftop(LightingSettings lighting)
+        {
+            _texCache.Clear();
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Lightmapping.lightingSettings = lighting;
+
+            SetupEnvironmentLighting(
+                new Color(0.22f, 0.30f, 0.48f), new Color(0.15f, 0.21f, 0.34f), new Color(0.08f, 0.10f, 0.16f),
+                true, new Color(0.10f, 0.14f, 0.25f), 0.010f);
+            CreateCamera(new Vector3(0f, 3f, -6f), Quaternion.Euler(15f, 0f, 0f));
+            CreateMoonlight(0.9f, Quaternion.Euler(50f, -30f, 0f));
+            CreateGlobalVolume();
+
+            Transform env = new GameObject("Environment").transform;
+            Box(env, "StreetSnow", new Vector3(20f, -8.3f, 5f), new Vector3(160f, 0.6f, 120f), ProjectBootstrap.MatSnow);
+
+            const int cols = 5, rows = 3;
+            const float w = 8f, d = 7f, gap = 1.0f;
+            float[,] heights =
+            {
+                { 0f, 0.4f, 0.1f, 0.5f, 0.2f },
+                { 0.3f, 0f, 0.45f, 0.1f, 0.4f },
+                { 0.1f, 0.4f, 0f, 0.3f, 0f },
+            };
+            var rng = new System.Random(7);
+            var chimneys = new List<Object>();
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    float x = c * (w + gap), z = r * (d + gap), y = heights[r, c];
+                    string tag = r + "_" + c;
+                    // Building body + snowy roof deck (deck top = y).
+                    Box(env, "Body_" + tag, new Vector3(x, y - 4.1f, z), new Vector3(w, 8f, d), ProjectBootstrap.MatBrick);
+                    GameObject deck = Box(env, "Deck_" + tag, new Vector3(x, y - 0.1f, z), new Vector3(w, 0.2f, d), ProjectBootstrap.MatSnow);
+                    deck.AddComponent<SurfaceTag>().Surface = SurfaceType.Default;
+                    // Low parapet on the street side.
+                    Box(env, "Parapet_" + tag, new Vector3(x, y + 0.15f, z - d * 0.5f + 0.1f), new Vector3(w, 0.3f, 0.2f), ProjectBootstrap.MatDarkWood, true);
+
+                    // Ice patch on every third roof.
+                    if ((r * cols + c) % 3 == 1)
+                    {
+                        GameObject ice = Box(env, "Ice_" + tag, new Vector3(x + (float)(rng.NextDouble() - 0.5) * 2f, y + 0.02f, z + (float)(rng.NextDouble() - 0.5) * 2f),
+                            new Vector3(3.5f, 0.04f, 2.8f), ProjectBootstrap.MatIce);
+                        ice.AddComponent<SurfaceTag>().Surface = SurfaceType.Ice;
+                    }
+
+                    // Fairy lights along the street edge.
+                    for (int k = 0; k < 6; k++)
+                        Ball(env, "Fairy", new Vector3(x - w * 0.5f + 0.8f + k * 1.3f, y + 0.45f, z - d * 0.5f + 0.15f), Vector3.one * 0.12f, ProjectBootstrap.MatEmissiveWarm);
+
+                    // Antenna / decor.
+                    if ((r + c) % 2 == 0)
+                    {
+                        Box(env, "AntennaPole", new Vector3(x + w * 0.35f, y + 0.9f, z + d * 0.3f), new Vector3(0.06f, 1.8f, 0.06f), ProjectBootstrap.MatMetal, false);
+                        Box(env, "AntennaBar", new Vector3(x + w * 0.35f, y + 1.5f, z + d * 0.3f), new Vector3(0.8f, 0.05f, 0.05f), ProjectBootstrap.MatMetal, false);
+                    }
+
+                    // Chimney with a floating number label (numbers are assigned at runtime).
+                    float cx = x + (float)(rng.NextDouble() - 0.5) * (w - 3f);
+                    float cz = z + (float)(rng.NextDouble() - 0.5) * (d - 3f) + 0.4f;
+                    GameObject ch = Box(env, "Chimney_" + tag, new Vector3(cx, y + 0.9f, cz), new Vector3(0.9f, 1.8f, 0.9f), ProjectBootstrap.MatBrick);
+                    Box(env, "ChimneyCap_" + tag, new Vector3(cx, y + 1.86f, cz), new Vector3(1.15f, 0.14f, 1.15f), ProjectBootstrap.MatSnow, false);
+                    Box(env, "ChimneyHole_" + tag, new Vector3(cx, y + 1.94f, cz), new Vector3(0.6f, 0.04f, 0.6f), ProjectBootstrap.MatDark, false);
+                    var chim = ch.AddComponent<SilentNight.Rooftop.RooftopChimney>();
+
+                    var labelGo = new GameObject("NumberLabel");
+                    labelGo.transform.SetParent(ch.transform, false);
+                    labelGo.transform.position = new Vector3(cx, y + 2.6f, cz);
+                    labelGo.AddComponent<SilentNight.Rooftop.Billboard>();
+                    var tm = labelGo.AddComponent<TextMesh>();
+                    tm.text = "№ ?";
+                    tm.fontSize = 64;
+                    tm.characterSize = 0.04f;
+                    tm.anchor = TextAnchor.MiddleCenter;
+                    tm.alignment = TextAlignment.Center;
+                    tm.color = new Color(1f, 0.92f, 0.65f);
+                    if (font != null)
+                    {
+                        tm.font = font;
+                        labelGo.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+                    }
+                    SetRef(chim, "numberLabel", tm);
+                    chimneys.Add(chim);
+                }
+            }
+
+            // Santa's sleigh parked on the first roof.
+            var sleigh = new GameObject("ParkedSleigh").transform;
+            sleigh.SetParent(env, false);
+            Box(sleigh, "RunnerL", new Vector3(-2.4f, 0.08f, 0f), new Vector3(0.12f, 0.16f, 3.2f), ProjectBootstrap.MatGold);
+            Box(sleigh, "RunnerR", new Vector3(-1.2f, 0.08f, 0f), new Vector3(0.12f, 0.16f, 3.2f), ProjectBootstrap.MatGold);
+            Box(sleigh, "Body", new Vector3(-1.8f, 0.6f, 0f), new Vector3(1.5f, 0.7f, 2.6f), ProjectBootstrap.MatRed);
+            Box(sleigh, "SeatBack", new Vector3(-1.8f, 1.1f, -1.2f), new Vector3(1.5f, 0.6f, 0.25f), ProjectBootstrap.MatRed);
+
+            // Distant city silhouettes with lit windows.
+            for (int i = 0; i < 60; i++)
+            {
+                float ang = (float)(rng.NextDouble() * Mathf.PI * 2f);
+                float dist = 55f + (float)rng.NextDouble() * 40f;
+                Vector3 p = new Vector3(20f + Mathf.Cos(ang) * dist, 0f, 8f + Mathf.Sin(ang) * dist);
+                float bh = 10f + (float)rng.NextDouble() * 25f;
+                Box(env, "Tower", new Vector3(p.x, bh * 0.5f - 8f, p.z), new Vector3(5f + (float)rng.NextDouble() * 5f, bh, 5f + (float)rng.NextDouble() * 5f), ProjectBootstrap.MatDark, false);
+                for (int k = 0; k < 4; k++)
+                    Ball(env, "Window", new Vector3(p.x + (float)(rng.NextDouble() - 0.5) * 3f, bh * 0.2f + k * 3f - 6f, p.z - 2.6f), Vector3.one * 0.5f, ProjectBootstrap.MatEmissiveWarm);
+            }
+
+            // Falling snow.
+            CreateSnowParticles(env, new Vector3(18f, 12f, 8f));
+
+            // Warm lights near the sleigh (the moon does the rest).
+            Point(env, "SleighGlow", new Vector3(-1.8f, 2.5f, 0f), new Color(1f, 0.75f, 0.45f), 3f, 8f);
+
+            // Respawn volume below the roofs.
+            var kill = new GameObject("FallRespawn");
+            kill.transform.position = new Vector3(18f, -4f, 8f);
+            var kc = kill.AddComponent<BoxCollider>();
+            kc.isTrigger = true;
+            kc.size = new Vector3(200f, 2f, 160f);
+            kill.AddComponent<SilentNight.Player.FallRespawn>();
+
+            // Level controller (picks the target chimney at runtime).
+            var ctrl = new GameObject("RooftopLevel").AddComponent<SilentNight.Rooftop.RooftopLevelController>();
+            SetArray(ctrl, "chimneys", chimneys);
+
+            CreateSpawnAndPlayer(new Vector3(0.3f, 0.05f, -1.6f), Quaternion.Euler(0f, 60f, 0f));
+
+            MakeStatic(env.gameObject);
+            SaveAndBake(scene, RooftopPath);
+        }
+
+        private static void CreateSnowParticles(Transform parent, Vector3 center)
+        {
+            var go = new GameObject("Snowfall");
+            go.transform.SetParent(parent, false);
+            go.transform.position = center;
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.loop = true;
+            main.startLifetime = 11f;
+            main.startSpeed = 0.2f;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.12f);
+            main.maxParticles = 2500;
+            main.gravityModifier = 0.12f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var em = ps.emission;
+            em.rateOverTime = 220f;
+            var sh = ps.shape;
+            sh.shapeType = ParticleSystemShapeType.Box;
+            sh.scale = new Vector3(70f, 1f, 50f);
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.x = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+            vel.space = ParticleSystemSimulationSpace.World;
+
+            Shader sh2 = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (sh2 == null) sh2 = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh2 != null)
+            {
+                string matPath = ProjectBootstrap.MaterialsFolder + "/SnowFlake.mat";
+                var m = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                if (m == null)
+                {
+                    m = new Material(sh2) { name = "SnowFlake" };
+                    AssetDatabase.CreateAsset(m, matPath);
+                }
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
+                go.GetComponent<ParticleSystemRenderer>().sharedMaterial = m;
+            }
         }
 
         // ------------------------------------------------------------------ House
 
         private static void BuildHouse(LightingSettings lighting)
         {
+            _texCache.Clear();
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             Lightmapping.lightingSettings = lighting;
 
@@ -530,6 +725,9 @@ namespace SilentNight.EditorTools
 
             GameObject elf = SilentNight.Player.PlayerSetup.CreatePlayer(pos, 0);
             elf.transform.rotation = rot;
+            var rag = elf.GetComponent<SilentNight.Player.ElfRagdoll>();
+            if (rag != null)
+                rag.ModelPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(SilentNight.Player.ElfRagdoll.DefaultModelPath);
         }
 
         private static LightingSettings EnsureLightingSettings()
@@ -568,6 +766,16 @@ namespace SilentNight.EditorTools
 
         private static void BuildTree(Transform parent, Vector3 basePos, float s)
         {
+            GameObject treeModel = Model(parent, "LivingRoom/ChristmasTree.fbx", "ChristmasTreeModel", basePos, 0f, 1.25f * s);
+            if (treeModel != null)
+            {
+                // Collider only around the pot, so gifts can be placed right next to the tree.
+                var potCol = new GameObject("TreePotCollider");
+                potCol.transform.SetParent(parent, false);
+                potCol.transform.position = basePos + Vector3.up * 0.3f;
+                potCol.AddComponent<BoxCollider>().size = new Vector3(0.9f, 0.6f, 0.9f);
+                return;
+            }
             Disc(parent, "TreeTrunk", basePos + Vector3.up * 0.35f * s, 0.3f * s, 0.7f * s, ProjectBootstrap.MatDarkWood, true);
             Ball(parent, "TreeTier1", basePos + Vector3.up * 1.15f * s, new Vector3(1.9f, 1.1f, 1.9f) * s, ProjectBootstrap.MatGreen);
             Ball(parent, "TreeTier2", basePos + Vector3.up * 1.85f * s, new Vector3(1.45f, 1.0f, 1.45f) * s, ProjectBootstrap.MatGreen);
@@ -587,7 +795,7 @@ namespace SilentNight.EditorTools
         private static void BuildFireplaceNorth(Transform parent, Vector3 wallBase)
         {
             float x = wallBase.x, z = wallBase.z - 0.25f;
-            Box(parent, "FireplaceBreast", new Vector3(x, 2.5f, z), new Vector3(2.6f, 5f, 0.5f), ProjectBootstrap.MatBrick);
+            Box(parent, "FireplaceBreast", new Vector3(x, 2f, z), new Vector3(2.6f, 4f, 0.5f), ProjectBootstrap.MatBrick);
             Box(parent, "FireplaceHole", new Vector3(x, 0.55f, z - 0.27f), new Vector3(1.2f, 1.0f, 0.04f), ProjectBootstrap.MatDark, false);
             Box(parent, "FireplaceMantle", new Vector3(x, 1.25f, z - 0.3f), new Vector3(2.4f, 0.12f, 0.6f), ProjectBootstrap.MatDarkWood);
             Box(parent, "FireplaceEmbers", new Vector3(x, 0.15f, z - 0.35f), new Vector3(0.8f, 0.12f, 0.25f), ProjectBootstrap.MatEmissiveWarm, false);
@@ -598,15 +806,33 @@ namespace SilentNight.EditorTools
         private static void BuildFireplaceEast(Transform parent, Transform moodProps, List<GameObject> cozyOnly, Vector3 wallBase)
         {
             float x = wallBase.x - 0.25f, z = wallBase.z;
-            Box(parent, "FireplaceBreast", new Vector3(x, 1.5f, z), new Vector3(0.5f, 3f, 2.6f), ProjectBootstrap.MatBrick);
-            Box(parent, "FireplaceHole", new Vector3(x - 0.27f, 0.55f, z), new Vector3(0.04f, 1.0f, 1.2f), ProjectBootstrap.MatDark, false);
-            Box(parent, "FireplaceColL", new Vector3(x - 0.45f, 0.6f, z - 0.85f), new Vector3(0.4f, 1.2f, 0.4f), ProjectBootstrap.MatBrick);
-            Box(parent, "FireplaceColR", new Vector3(x - 0.45f, 0.6f, z + 0.85f), new Vector3(0.4f, 1.2f, 0.4f), ProjectBootstrap.MatBrick);
-            Box(parent, "FireplaceMantle", new Vector3(x - 0.45f, 1.26f, z), new Vector3(0.6f, 0.12f, 2.4f), ProjectBootstrap.MatDarkWood);
-            Box(parent, "Hearth", new Vector3(x - 0.7f, 0.05f, z), new Vector3(0.9f, 0.1f, 2.6f), ProjectBootstrap.MatBrick);
-            for (int i = 0; i < 3; i++)
-                Box(parent, "Stocking", new Vector3(x - 0.78f, 1.0f, z - 0.7f + i * 0.7f), new Vector3(0.06f, 0.35f, 0.18f), ProjectBootstrap.MatRed, false);
+            GameObject fp = Model(parent, "LivingRoom/Fireplace.fbx", "FireplaceModel", new Vector3(x, 0f, z), -90f, 1.75f);
+            if (fp != null)
+            {
+                // Back flush against the wall (inner face x = wallBase.x - 0.25 - 0.25).
+                Bounds b = BoundsOf(fp);
+                float wallFace = wallBase.x - 0.5f;
+                fp.transform.position += new Vector3(wallFace - b.max.x, 0f, 0f);
+                b = BoundsOf(fp);
+                // Collider only on the back slab: the hearth stays open so the chimney exit zone is reachable.
+                var slab = new GameObject("FireplaceCollider");
+                slab.transform.SetParent(parent, false);
+                float depth = b.size.x;
+                slab.transform.position = new Vector3(b.max.x - depth * 0.15f, b.center.y, b.center.z);
+                slab.AddComponent<BoxCollider>().size = new Vector3(depth * 0.3f, b.size.y, b.size.z);
+            }
+            else
+            {
+                Box(parent, "FireplaceBreast", new Vector3(x, 1.5f, z), new Vector3(0.5f, 3f, 2.6f), ProjectBootstrap.MatBrick);
+                Box(parent, "FireplaceHole", new Vector3(x - 0.27f, 0.55f, z), new Vector3(0.04f, 1.0f, 1.2f), ProjectBootstrap.MatDark, false);
+                Box(parent, "FireplaceColL", new Vector3(x - 0.45f, 0.6f, z - 0.85f), new Vector3(0.4f, 1.2f, 0.4f), ProjectBootstrap.MatBrick);
+                Box(parent, "FireplaceColR", new Vector3(x - 0.45f, 0.6f, z + 0.85f), new Vector3(0.4f, 1.2f, 0.4f), ProjectBootstrap.MatBrick);
+                Box(parent, "FireplaceMantle", new Vector3(x - 0.45f, 1.26f, z), new Vector3(0.6f, 0.12f, 2.4f), ProjectBootstrap.MatDarkWood);
+                Box(parent, "Hearth", new Vector3(x - 0.7f, 0.05f, z), new Vector3(0.9f, 0.1f, 2.6f), ProjectBootstrap.MatBrick);
+                for (int i = 0; i < 3; i++)
+                    Box(parent, "Stocking", new Vector3(x - 0.78f, 1.0f, z - 0.7f + i * 0.7f), new Vector3(0.06f, 0.35f, 0.18f), ProjectBootstrap.MatRed, false);
 
+            }
             GameObject embers = Box(moodProps, "FireEmbers", new Vector3(x - 0.35f, 0.18f, z), new Vector3(0.25f, 0.15f, 0.8f), ProjectBootstrap.MatEmissiveWarm, false);
             cozyOnly.Add(embers);
         }
@@ -634,6 +860,33 @@ namespace SilentNight.EditorTools
         }
 
         /// <summary>Cube at a world position (parents are never scaled).</summary>
+        private const string EnvRoot = "Assets/_Project/Art/Environment/";
+
+        /// <summary>Instantiates a prepared environment FBX (pivot = floor centre). Returns null if the asset is missing.</summary>
+        private static GameObject Model(Transform parent, string relPath, string name, Vector3 pos, float yaw, float scale)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(EnvRoot + relPath);
+            if (asset == null)
+            {
+                Debug.LogWarning("[Silent Night] Model missing, using greybox: " + relPath);
+                return null;
+            }
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(asset, parent);
+            go.name = name;
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            go.transform.localScale = Vector3.one * scale;
+            return go;
+        }
+
+        /// <summary>World-space bounds of all renderers under go.</summary>
+        private static Bounds BoundsOf(GameObject go)
+        {
+            var rs = go.GetComponentsInChildren<Renderer>();
+            Bounds b = rs.Length > 0 ? rs[0].bounds : new Bounds(go.transform.position, Vector3.one);
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            return b;
+        }
+
         private static GameObject Box(Transform parent, string name, Vector3 center, Vector3 size, string mat, bool collider = true, float yaw = 0f)
         {
             GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -646,7 +899,49 @@ namespace SilentNight.EditorTools
             if (!collider) Object.DestroyImmediate(go.GetComponent<Collider>());
             Material m = Mat(mat);
             if (m != null) go.GetComponent<MeshRenderer>().sharedMaterial = m;
+            ApplyTexture(go.GetComponent<MeshRenderer>(), m, mat, size);
             return go;
+        }
+
+        // ---- optional tiling textures: drop <MaterialKey>.png (Wall, Wood, DarkWood, Carpet, Tile, Concrete, Snow, Brick) into
+        // Assets/_Project/Art/Environment/Textures/ and rebuild; they are applied with world-size tiling.
+        private const string TexRoot = "Assets/_Project/Art/Environment/Textures/";
+        private static readonly Dictionary<string, Texture2D> _texCache = new Dictionary<string, Texture2D>();
+
+        private static float TileMeters(string key)
+        {
+            switch (key)
+            {
+                case ProjectBootstrap.MatTile: return 1.5f;
+                case ProjectBootstrap.MatSnow: return 4f;
+                case ProjectBootstrap.MatWall: return 3f;
+                case ProjectBootstrap.MatCarpet: return 3f;
+                case ProjectBootstrap.MatConcrete: return 3f;
+                default: return 2.5f;
+            }
+        }
+
+        private static void ApplyTexture(MeshRenderer r, Material m, string key, Vector3 size)
+        {
+            if (r == null || m == null) return;
+            if (!_texCache.TryGetValue(key, out Texture2D tex))
+            {
+                tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TexRoot + key + ".png");
+                _texCache[key] = tex;
+                if (tex != null)
+                {
+                    m.SetTexture("_BaseMap", tex);
+                    m.SetColor("_BaseColor", Color.white);
+                    EditorUtility.SetDirty(m);
+                }
+            }
+            if (tex == null) return;
+            float t = TileMeters(key);
+            bool flat = size.y < 0.4f;
+            Vector2 tiles = flat ? new Vector2(size.x / t, size.z / t) : new Vector2(Mathf.Max(size.x, size.z) / t, size.y / t);
+            var mpb = new MaterialPropertyBlock();
+            mpb.SetVector("_BaseMap_ST", new Vector4(Mathf.Max(0.25f, tiles.x), Mathf.Max(0.25f, tiles.y), 0f, 0f));
+            r.SetPropertyBlock(mpb);
         }
 
         /// <summary>Decorative sphere without collider.</summary>

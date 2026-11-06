@@ -12,14 +12,14 @@ namespace SilentNight.Player
     [DisallowMultipleComponent]
     public class ElfInteractor : MonoBehaviour, IInteractor
     {
-        [SerializeField] private float radius = 1.6f;
-        [SerializeField] private float probeHeight = 0.6f;
-        [SerializeField] private float probeForwardOffset = 0.4f;
+        [SerializeField] private float radius = 1.0f;
+        [SerializeField] private float probeHeight = 0.33f;
+        [SerializeField] private float probeForwardOffset = 0.22f;
         [Tooltip("How much being in front of the elf is preferred over pure distance (metres of bonus at dot = 1).")]
         [SerializeField] private float facingWeight = 0.6f;
         [Tooltip("Candidates behind the elf (dot below this) are ignored unless very close.")]
         [SerializeField] private float minFacingDot = -0.4f;
-        [SerializeField] private float closeRange = 0.7f;
+        [SerializeField] private float closeRange = 0.4f;
         [SerializeField] private LayerMask mask = ~0;
 
         private ElfCarry _carry;

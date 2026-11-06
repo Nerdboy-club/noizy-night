@@ -6,8 +6,10 @@ namespace SilentNight.Player
     /// <summary>Builds a complete player GameObject. Usable from the editor scene builder and at runtime.</summary>
     public static class PlayerSetup
     {
-        public const float ControllerHeight = 1.1f;
-        public const float ControllerRadius = 0.3f;
+        /// <summary>Elf size relative to the original 1.1 m design (the houses are human-sized, elves are tiny).</summary>
+        public const float ElfScale = 0.55f;
+        public const float ControllerHeight = 1.1f * ElfScale;
+        public const float ControllerRadius = 0.3f * ElfScale;
 
         /// <param name="pos">Feet position.</param>
         /// <param name="themeIndex">0 green, 1 red, 2 blue, 3 purple.</param>
@@ -23,7 +25,7 @@ namespace SilentNight.Player
             cc.height = ControllerHeight;
             cc.radius = ControllerRadius;
             cc.center = new Vector3(0f, ControllerHeight * 0.5f, 0f);
-            cc.stepOffset = 0.3f;
+            cc.stepOffset = 0.3f * ElfScale;
             cc.slopeLimit = 45f;
             cc.skinWidth = 0.03f;
             cc.minMoveDistance = 0f;
@@ -37,6 +39,7 @@ namespace SilentNight.Player
             go.AddComponent<ElfInteractor>();
             go.AddComponent<ElfController>();
             go.AddComponent<ElfAnimator>();
+            go.AddComponent<ElfRagdoll>();
             go.AddComponent<ThirdPersonCameraRig>();
 
             SetLayerRecursive(go.transform, go.layer);

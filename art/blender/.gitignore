@@ -1,0 +1,5 @@
+# Regenerable from the scripts here (source GLBs live outside the repo)
+*.blend
+*.blend1
+# preview renders
+*.png

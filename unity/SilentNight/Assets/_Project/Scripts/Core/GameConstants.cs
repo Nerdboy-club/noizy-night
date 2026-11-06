@@ -5,6 +5,7 @@ namespace SilentNight.Core
         // Scene names (must match files in Assets/_Project/Scenes and Build Settings)
         public const string SceneBoot = "Boot";
         public const string SceneHub = "Hub";
+        public const string SceneRooftop = "Rooftop";
         public const string SceneHouse = "House";
 
         // Layers (created by Editor/ProjectBootstrap)

@@ -28,21 +28,21 @@ namespace SilentNight.Player
         [SerializeField] private float startPitch = 18f;
 
         [Header("Framing")]
-        [SerializeField] private float pivotHeight = 0.95f;
-        [SerializeField] private float crouchPivotHeight = 0.65f;
-        [SerializeField] private Vector3 shoulderOffset = new Vector3(0.4f, 0.2f, 0f);
-        [SerializeField] private float verticalArmLength = 0.25f;
+        [SerializeField] private float pivotHeight = 0.52f;
+        [SerializeField] private float crouchPivotHeight = 0.36f;
+        [SerializeField] private Vector3 shoulderOffset = new Vector3(0.25f, 0.12f, 0f);
+        [SerializeField] private float verticalArmLength = 0.15f;
         [Range(0f, 1f)] [SerializeField] private float cameraSide = 1f;
         [SerializeField] private float fieldOfView = 60f;
-        [SerializeField] private float cameraRadius = 0.2f;
+        [SerializeField] private float cameraRadius = 0.12f;
 
         [Header("Distance")]
-        [SerializeField] private float startDistance = 4.5f;
-        [SerializeField] private float closeDistance = 3.0f;
-        [SerializeField] private float farDistance = 6.0f;
-        [SerializeField] private float minZoom = 2f;
-        [SerializeField] private float maxZoom = 8f;
-        [SerializeField] private float zoomStep = 0.5f;
+        [SerializeField] private float startDistance = 2.6f;
+        [SerializeField] private float closeDistance = 1.8f;
+        [SerializeField] private float farDistance = 3.6f;
+        [SerializeField] private float minZoom = 1.2f;
+        [SerializeField] private float maxZoom = 5f;
+        [SerializeField] private float zoomStep = 0.3f;
         [SerializeField] private float distanceSmoothing = 10f;
 
         private ElfInput _input;

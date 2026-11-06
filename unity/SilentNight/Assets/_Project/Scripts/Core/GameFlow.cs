@@ -32,6 +32,7 @@ namespace SilentNight.Core
             GameServices.RegenerateOrders();
 
             GameEvents.RequestStartDelivery += OnRequestStartDelivery;
+            GameEvents.RequestEnterHouse += OnRequestEnterHouse;
             GameEvents.RequestReturnToHub += OnRequestReturnToHub;
             GameEvents.GiftDelivered += OnGiftDelivered;
             GameEvents.PlayerCaught += OnPlayerCaught;
@@ -40,6 +41,7 @@ namespace SilentNight.Core
         private void OnDestroy()
         {
             GameEvents.RequestStartDelivery -= OnRequestStartDelivery;
+            GameEvents.RequestEnterHouse -= OnRequestEnterHouse;
             GameEvents.RequestReturnToHub -= OnRequestReturnToHub;
             GameEvents.GiftDelivered -= OnGiftDelivered;
             GameEvents.PlayerCaught -= OnPlayerCaught;
@@ -52,7 +54,10 @@ namespace SilentNight.Core
                 StartCoroutine(LoadScene(GameConstants.SceneHub, GameState.MainMenu));
             else
                 // Started directly from Hub/House in the editor: infer state.
-                SetState(SceneManager.GetActiveScene().name == GameConstants.SceneHouse ? GameState.Delivery : GameState.MainMenu);
+            {
+                string sn = SceneManager.GetActiveScene().name;
+                SetState(sn == GameConstants.SceneHouse ? GameState.Delivery : (sn == GameConstants.SceneRooftop ? GameState.Rooftop : GameState.MainMenu));
+            }
         }
 
         // ---------------- public API (also usable from UI) ----------------
@@ -70,7 +75,7 @@ namespace SilentNight.Core
                 Time.timeScale = 1f;
                 SetState(_stateBeforePause);
             }
-            else if (State == GameState.Hub || State == GameState.Delivery)
+            else if (State == GameState.Hub || State == GameState.Delivery || State == GameState.Rooftop)
             {
                 _stateBeforePause = State;
                 Time.timeScale = 0f;
@@ -98,6 +103,13 @@ namespace SilentNight.Core
             if (GameServices.LoadedGifts.Count == 0 && GameServices.ActiveOrder != null)
                 GameServices.LoadedGifts.AddRange(GameServices.ActiveOrder.Gifts);
             _deliveredIntegrity.Clear();
+            // Sleigh flight lands on the rooftops: find the right chimney first.
+            StartCoroutine(LoadScene(GameConstants.SceneRooftop, GameState.Rooftop));
+        }
+
+        private void OnRequestEnterHouse()
+        {
+            if (IsLoading || State != GameState.Rooftop) return;
             StartCoroutine(LoadScene(GameConstants.SceneHouse, GameState.Delivery));
         }
 
@@ -162,7 +174,7 @@ namespace SilentNight.Core
             if (next == State) return;
             var prev = State;
             State = next;
-            bool gameplay = next == GameState.Hub || next == GameState.Delivery;
+            bool gameplay = next == GameState.Hub || next == GameState.Delivery || next == GameState.Rooftop;
             Cursor.lockState = gameplay ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !gameplay;
             GameEvents.RaiseStateChanged(prev, next);

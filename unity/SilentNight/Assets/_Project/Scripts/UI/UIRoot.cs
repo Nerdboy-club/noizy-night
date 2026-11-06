@@ -250,7 +250,7 @@ namespace SilentNight.UI
             }
             CloseModalInternal(false); // GameFlow already set the cursor for the new state
 
-            bool gameplay = next == GameState.Hub || next == GameState.Delivery;
+            bool gameplay = next == GameState.Hub || next == GameState.Delivery || next == GameState.Rooftop;
             if (next == GameState.Paused) _pausedFrom = prev;
             // Re-enter HUD mode unless this is a plain resume (Pause -> "give up" goes Paused -> Hub from a Delivery).
             if (gameplay && (prev != GameState.Paused || next != _pausedFrom)) _hud.EnterMode(next);
@@ -314,7 +314,7 @@ namespace SilentNight.UI
             var fe = _document != null && _document.rootVisualElement != null
                 ? _document.rootVisualElement.focusController?.focusedElement : null;
             fe?.Blur();
-            if (relockCursor && (_state == GameState.Hub || _state == GameState.Delivery))
+            if (relockCursor && (_state == GameState.Hub || _state == GameState.Delivery || _state == GameState.Rooftop))
             {
                 UnityEngine.Cursor.lockState = CursorLockMode.Locked;
                 UnityEngine.Cursor.visible = false;
@@ -343,7 +343,7 @@ namespace SilentNight.UI
                     RequestClosePanel();
                 }
                 else if (handlePauseKey && GameServices.Flow != null &&
-                         (_state == GameState.Hub || _state == GameState.Delivery || _state == GameState.Paused))
+                         (_state == GameState.Hub || _state == GameState.Delivery || _state == GameState.Rooftop || _state == GameState.Paused))
                     GameServices.Flow.TogglePause();
             }
             else if (tab && handleOrdersKey && _state == GameState.Hub)
