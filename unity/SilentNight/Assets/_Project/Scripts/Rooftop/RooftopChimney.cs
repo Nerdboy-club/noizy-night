@@ -29,6 +29,7 @@ namespace SilentNight.Rooftop
         {
             if (IsTarget)
             {
+                SilentNight.FX.SootPuff.Spawn(transform.position + Vector3.up * 1.0f, 0.8f);
                 GameEvents.RaiseToast("Плюх! Прямо в камин.");
                 GameEvents.RaiseRequestEnterHouse();
             }

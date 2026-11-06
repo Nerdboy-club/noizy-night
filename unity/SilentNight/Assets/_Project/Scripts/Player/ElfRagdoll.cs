@@ -588,6 +588,7 @@ namespace SilentNight.Player
             _modeTimer = 0f;
             _strength = 0f;
             if (_controller != null) _controller.InputLocked = true;
+            if (_pelvis != null) SilentNight.FX.LandingDust.Spawn(_pelvis.T.position, 0.8f);
 
             Vector3 push;
             if (_hasPendingPush) push = _pendingPush;

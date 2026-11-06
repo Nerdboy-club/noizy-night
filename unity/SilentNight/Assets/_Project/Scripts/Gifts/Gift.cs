@@ -22,6 +22,7 @@ namespace SilentNight.Gifts
         [SerializeField] private float massNoisy = 1.4f;
         [SerializeField] private float massHuge = 12f;
         [SerializeField] private float massFragile = 0.8f;
+        [SerializeField] private float massRcCar = 0.9f;
         [SerializeField] private float linearDamping = 0.4f;
         [SerializeField] private float angularDamping = 0.6f;
 
@@ -80,9 +81,12 @@ namespace SilentNight.Gifts
         public float WindLeft => _windLeft;
         /// <summary>Player-facing name (Russian).</summary>
         public string Label => LabelFor(kind);
+        /// <summary>RcCar only: currently driving on its own (distraction run).</summary>
+        public bool IsSelfDriving => _rcCar != null && _rcCar.enabled && _rcCar.IsDriving;
 
         private Rigidbody _rb;
         private GiftVisual _visual;
+        private RcCarDriver _rcCar;
         private Collider[] _colliders;
         private Renderer[] _renderers;
         private readonly List<Collider> _holderColliders = new List<Collider>(8);
@@ -100,6 +104,7 @@ namespace SilentNight.Gifts
             GiftKind.Noisy => "Заводная шумная шкатулка",
             GiftKind.Huge => "Огромный велосипед в обёртке",
             GiftKind.Fragile => "Стеклянный снежный шар",
+            GiftKind.RcCar => "Радиоуправляемая машинка",
             _ => "Подарок"
         };
 
@@ -109,6 +114,7 @@ namespace SilentNight.Gifts
             GiftKind.Noisy => massNoisy,
             GiftKind.Huge => massHuge,
             GiftKind.Fragile => massFragile,
+            GiftKind.RcCar => massRcCar,
             _ => massSmall
         };
 
@@ -146,6 +152,20 @@ namespace SilentNight.Gifts
             _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             _rb.isKinematic = false;
             _rb.useGravity = true;
+
+            // RcCar: self-driving distraction helper. Other kinds keep it disabled (if the kind changed).
+            if (kind == GiftKind.RcCar)
+            {
+                if (_rcCar == null) _rcCar = GetComponent<RcCarDriver>();
+                if (_rcCar == null) _rcCar = gameObject.AddComponent<RcCarDriver>();
+                _rcCar.Init(this, _rb, _visual);
+                _rcCar.enabled = true;
+            }
+            else if (_rcCar != null)
+            {
+                _rcCar.Disarm();
+                _rcCar.enabled = false;
+            }
         }
 
         private static void SetLayerRecursive(Transform t, int layer)
@@ -229,8 +249,8 @@ namespace SilentNight.Gifts
                 GameEvents.RaiseNoise(new NoiseEvent(p, loud, NoiseSource.GiftImpact, gameObject));
             }
 
-            // Packaging damage.
-            if (speed > damageSpeedThreshold && _damageTimer <= 0f)
+            // Packaging damage (skipped while the RC car drives itself: its own bumps don't wreck it).
+            if (speed > damageSpeedThreshold && _damageTimer <= 0f && !IsSelfDriving)
             {
                 _damageTimer = damageCooldown;
                 int grip = GameServices.Profile != null ? GameServices.Profile.GripLevel : 0;
@@ -268,6 +288,7 @@ namespace SilentNight.Gifts
                 _windLeft = windupDuration;
                 _ringLeft = 0;
             }
+            if (_rcCar != null) _rcCar.Disarm(); // grabbing the RC car switches it off
 
             _rb.interpolation = RigidbodyInterpolation.None; // child of a moving rig: no interpolation fight
             if (!_rb.isKinematic)
@@ -309,12 +330,16 @@ namespace SilentNight.Gifts
             _rb.angularVelocity = Vector3.zero;
             _rb.WakeUp();
             _damageTimer = 0.15f; // don't count the release itself as an impact
+
+            // RcCar: arm it; it switches on ~1 s after it settles on the floor.
+            if (kind == GiftKind.RcCar && _rcCar != null && _rcCar.enabled) _rcCar.Arm();
         }
 
         public void OnStoredInSack()
         {
             IsHeld = false;
             IsInSack = true;
+            if (_rcCar != null) _rcCar.Disarm();
             SetIgnoreHolder(false);
             if (!_rb.isKinematic)
             {
@@ -332,6 +357,7 @@ namespace SilentNight.Gifts
             IsDelivered = true;
             IsHeld = false;
             IsInSack = false;
+            if (_rcCar != null) _rcCar.Disarm();
             SetIgnoreHolder(false);
             transform.SetParent(null, true);
             if (!_rb.isKinematic)

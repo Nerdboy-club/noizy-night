@@ -27,8 +27,13 @@ namespace SilentNight.Gifts
         [SerializeField] private Color tire = new Color32(0x1f, 0x1f, 0x24, 0xff);
         [SerializeField] private Color gold = new Color32(0xf5, 0xb0, 0x21, 0xff);
         [SerializeField] private Color silver = new Color32(0xe2, 0xe8, 0xf0, 0xff);
+        [SerializeField] private Color rcPaper = new Color32(0x7c, 0x3a, 0xed, 0xff);
+        [SerializeField] private Color rcRibbon = new Color32(0xfa, 0xcc, 0x15, 0xff);
+        [SerializeField] private Color rcBall = new Color32(0xef, 0x44, 0x44, 0xff);
 
         public Transform WindupKey { get; private set; }
+        /// <summary>RcCar only: antenna pivot (at its base), wobbled by RcCarDriver while driving.</summary>
+        public Transform RcAntenna { get; private set; }
         public Renderer[] Renderers { get; private set; } = System.Array.Empty<Renderer>();
         public BoxCollider MainCollider { get; private set; }
         public Vector3 ColliderSize => MainCollider != null ? MainCollider.size : Vector3.one * 0.4f;
@@ -55,6 +60,7 @@ namespace SilentNight.Gifts
                 DestroySafe(old);
             }
             WindupKey = null;
+            RcAntenna = null;
 
             _root = new GameObject("Visual").transform;
             _root.SetParent(transform, false);
@@ -74,6 +80,7 @@ namespace SilentNight.Gifts
                     case GiftKind.Noisy: size = BuildNoisy(); break;
                     case GiftKind.Huge: size = BuildHuge(); break;
                     case GiftKind.Fragile: size = BuildFragile(); break;
+                    case GiftKind.RcCar: size = BuildRcCar(); break;
                     default: size = BuildSmall(); break;
                 }
                 SetupCollider(size, Vector3.zero);
@@ -147,6 +154,50 @@ namespace SilentNight.Gifts
         public void ShowBroken()
         {
             if (_globeGlass != null) _globeGlass.sharedMaterial = Mat(new Color(0.45f, 0.47f, 0.5f), 0f, 0.3f);
+        }
+
+        /// <summary>
+        /// Radio-controlled toy car in gift wrap: low box on 4 little wheels with an antenna and a red ball.
+        /// Long axis = local Z (forward = drive direction). Collider 0.22 x 0.16 x 0.32.
+        /// </summary>
+        private Vector3 BuildRcCar()
+        {
+            Material paper = Mat(rcPaper), ribbon = Mat(rcRibbon), rubber = Mat(tire, 0f, 0.2f);
+            Material hub = Mat(silver, 0.8f, 0.7f), ball = Mat(rcBall, 0f, 0.6f), metal = Mat(silver, 0.9f, 0.8f);
+
+            // wheels (axis along local X), bottoms touch the collider floor at y = -0.08
+            const float wheelD = 0.1f;
+            const float wy = -0.08f + wheelD * 0.5f;
+            foreach (float x in new[] { -0.09f, 0.09f })
+            foreach (float z in new[] { -0.1f, 0.1f })
+            {
+                var w = Part(PrimitiveType.Cylinder, rubber, new Vector3(x, wy, z), new Vector3(wheelD, 0.02f, wheelD));
+                w.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                var h = Part(PrimitiveType.Cylinder, hub, new Vector3(x * 1.12f, wy, z), new Vector3(0.04f, 0.006f, 0.04f));
+                h.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            }
+
+            // wrapped body + small cabin
+            Part(PrimitiveType.Cube, paper, new Vector3(0f, 0f, 0f), new Vector3(0.16f, 0.09f, 0.3f));
+            Part(PrimitiveType.Cube, paper, new Vector3(0f, 0.06f, -0.02f), new Vector3(0.13f, 0.04f, 0.14f));
+            // ribbons
+            Part(PrimitiveType.Cube, ribbon, new Vector3(0f, 0.005f, 0f), new Vector3(0.165f, 0.095f, 0.04f));
+            Part(PrimitiveType.Cube, ribbon, new Vector3(0f, 0.005f, 0f), new Vector3(0.04f, 0.095f, 0.305f));
+            Part(PrimitiveType.Cube, ribbon, new Vector3(0f, 0.06f, -0.02f), new Vector3(0.04f, 0.045f, 0.145f));
+            Bow(ribbon, new Vector3(0f, 0.085f, -0.02f), 0.45f);
+            // headlights on the nose (+Z)
+            Part(PrimitiveType.Sphere, Mat(gold, 0.5f, 0.9f), new Vector3(-0.05f, 0.01f, 0.15f), Vector3.one * 0.03f);
+            Part(PrimitiveType.Sphere, Mat(gold, 0.5f, 0.9f), new Vector3(0.05f, 0.01f, 0.15f), Vector3.one * 0.03f);
+
+            // antenna on the back-right corner, pivot at its base
+            var ant = new GameObject("RcAntenna").transform;
+            ant.SetParent(_root, false);
+            ant.localPosition = new Vector3(0.055f, 0.045f, -0.12f);
+            Part(PrimitiveType.Cylinder, metal, new Vector3(0f, 0.07f, 0f), new Vector3(0.008f, 0.07f, 0.008f), ant);
+            Part(PrimitiveType.Sphere, ball, new Vector3(0f, 0.145f, 0f), Vector3.one * 0.035f, ant);
+            RcAntenna = ant;
+
+            return new Vector3(0.22f, 0.16f, 0.32f);
         }
 
         private Vector3 BuildHuge()

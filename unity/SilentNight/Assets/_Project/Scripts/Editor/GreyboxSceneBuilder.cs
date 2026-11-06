@@ -301,6 +301,10 @@ namespace SilentNight.EditorTools
                     Box(env, "ChimneyCap_" + tag, new Vector3(cx, y + 1.86f, cz), new Vector3(1.15f, 0.14f, 1.15f), ProjectBootstrap.MatSnow, false);
                     Box(env, "ChimneyHole_" + tag, new Vector3(cx, y + 1.94f, cz), new Vector3(0.6f, 0.04f, 0.6f), ProjectBootstrap.MatDark, false);
                     var chim = ch.AddComponent<SilentNight.Rooftop.RooftopChimney>();
+                    var smokeGo = new GameObject("ChimneySmoke");
+                    smokeGo.transform.SetParent(ch.transform, false);
+                    smokeGo.transform.position = new Vector3(cx, y + 1.95f, cz);
+                    smokeGo.AddComponent<SilentNight.FX.ChimneySmoke>();
 
                     var labelGo = new GameObject("NumberLabel");
                     labelGo.transform.SetParent(ch.transform, false);
@@ -613,6 +617,11 @@ namespace SilentNight.EditorTools
             SetArray(mood, "spookyFlickerLights", flicker.ConvertAll(l => (Object)l));
             SetArray(mood, "cozyOnlyObjects", cozyOnly.ConvertAll(g => (Object)g));
             SetArray(mood, "spookyOnlyObjects", spookyOnly.ConvertAll(g => (Object)g));
+
+            // Soot cloud: the elf just fell down the chimney.
+            var soot = new GameObject("ArrivalSoot");
+            soot.transform.position = new Vector3(10.1f, 0.5f, 3.5f);
+            soot.AddComponent<SilentNight.FX.SootPuff>();
 
             // ---- player (arrives through the chimney) ----
             CreateSpawnAndPlayer(new Vector3(9.4f, 0f, 3.5f), Quaternion.Euler(0f, -90f, 0f));

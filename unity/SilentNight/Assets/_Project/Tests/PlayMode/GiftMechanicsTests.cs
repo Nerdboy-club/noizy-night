@@ -68,6 +68,20 @@ namespace SilentNight.Tests
             Assert.AreEqual(0, (int)ring.GetValue(box), "pickup stops the ringing");
             Assert.Greater((float)wind.GetValue(box), 30f, "pickup re-winds the key");
         }
+        [UnityTest]
+        public IEnumerator RcCar_DrivesOffByItselfAfterDrop()
+        {
+            yield return LoadHub();
+            yield return new WaitForSeconds(0.5f);
+            Component car = Spawn("RcCar", new Vector3(-2f, 0.2f, -1.5f));
+            yield return new WaitForSeconds(0.5f);
+            Vector3 start = car.transform.position;
+            car.GetType().GetMethod("OnDropped").Invoke(car, new object[] { Vector3.zero });
+            yield return new WaitForSeconds(3.5f);
+            float moved = Vector3.Distance(new Vector3(start.x, 0f, start.z), new Vector3(car.transform.position.x, 0f, car.transform.position.z));
+            Debug.Log("[Smoke] rc car drove " + moved.ToString("0.00") + " m");
+            Assert.Greater(moved, 1f, "rc car drives away on its own");
+        }
     }
 }
 #endif

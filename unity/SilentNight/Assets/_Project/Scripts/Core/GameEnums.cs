@@ -17,7 +17,7 @@ namespace SilentNight.Core
     public enum HouseMood { Cozy, Spooky }
 
     /// <summary>Gift class. Small/Noisy/Fragile fit in the sack, Huge must be carried (bike). Fragile = glass snow globe, breaks on hard impacts.</summary>
-    public enum GiftKind { Small, Noisy, Huge, Fragile }
+    public enum GiftKind { Small, Noisy, Huge, Fragile, RcCar }
 
     /// <summary>What produced a noise. Used for UI/audio flavour and NPC reactions.</summary>
     public enum NoiseSource

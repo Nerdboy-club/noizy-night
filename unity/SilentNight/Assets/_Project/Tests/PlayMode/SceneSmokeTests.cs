@@ -151,6 +151,27 @@ namespace SilentNight.Tests
             SetMove(null);
             Assert.IsTrue(limp, "walking over a toy car trips the elf");
         }
+        [UnityTest]
+        public IEnumerator House_AllGiftsCanBeDeliveredUnderTheTree()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1.5f);
+            Component spawner = Find("SilentNight.Gifts.HouseGiftSpawner");
+            Component tree = Find("SilentNight.Gifts.TreeDropZone");
+            Component carry = Find("SilentNight.Player.ElfCarry");
+            Component interactor = Find("SilentNight.Player.ElfInteractor");
+            var gifts = (System.Collections.IList)spawner.GetType().GetField("SpawnedGifts").GetValue(spawner);
+            int total = (int)Get(spawner, "TotalCount");
+            Assert.Greater(total, 0, "house has gifts to deliver");
+            foreach (object g in gifts)
+            {
+                bool picked = (bool)carry.GetType().GetMethod("TryPickUp").Invoke(carry, new[] { g });
+                Assert.IsTrue(picked, "elf can pick up " + g);
+                tree.GetType().GetMethod("Interact").Invoke(tree, new object[] { interactor });
+                yield return null;
+            }
+            Assert.AreEqual(total, (int)Get(tree, "Delivered"), "every gift counted as delivered");
+        }
     }
 }
 #endif

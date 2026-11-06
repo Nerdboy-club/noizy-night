@@ -578,6 +578,7 @@ namespace SilentNight.Player
             float fall = _peakFallSpeed;
             _peakFallSpeed = 0f;
             Landed?.Invoke(fall);
+            if (fall >= 3f) SilentNight.FX.LandingDust.Spawn(transform.position, Mathf.InverseLerp(3f, 12f, fall));
             if (fall < landingMinFallSpeed) return;
 
             float t = Mathf.InverseLerp(landingMinFallSpeed, landingMaxFallSpeed, fall);

@@ -18,6 +18,7 @@ namespace SilentNight.Player
             Vector3 pos = spawn != null ? spawn.transform.position : Vector3.up;
             Quaternion rot = spawn != null ? spawn.transform.rotation : Quaternion.identity;
             elf.Teleport(pos, rot);
+            SilentNight.FX.SootPuff.Spawn(pos + Vector3.up * 0.3f, 0.6f);
             GameEvents.RaiseToast("Эльф свалился в сугроб и забрался обратно на крышу.");
         }
     }
