@@ -22,6 +22,8 @@ namespace SilentNight.Player
         // ---------- continuous values ----------
         /// <summary>WASD / left stick, magnitude 0..1.</summary>
         public Vector2 Move { get; private set; }
+        /// <summary>Test/automation hook: when set, replaces the WASD/stick value.</summary>
+        public static Vector2? DebugMoveOverride;
         /// <summary>Combined look this frame in mouse-pixel units (mouse delta + scaled right stick).</summary>
         public Vector2 Look { get; private set; }
         /// <summary>Raw mouse delta this frame (pixels).</summary>
@@ -148,7 +150,7 @@ namespace SilentNight.Player
         {
             if (!_created) return;
 
-            Move = Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
+            Move = DebugMoveOverride ?? Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
             LookMouse = _lookMouse.ReadValue<Vector2>();
             LookStick = _lookStick.ReadValue<Vector2>();
             Look = LookMouse + LookStick * (stickLookPixelsPerSecond * Time.unscaledDeltaTime);

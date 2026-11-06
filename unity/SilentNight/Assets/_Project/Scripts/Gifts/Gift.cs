@@ -21,6 +21,7 @@ namespace SilentNight.Gifts
         [SerializeField] private float massSmall = 1.0f;
         [SerializeField] private float massNoisy = 1.4f;
         [SerializeField] private float massHuge = 12f;
+        [SerializeField] private float massFragile = 0.8f;
         [SerializeField] private float linearDamping = 0.4f;
         [SerializeField] private float angularDamping = 0.6f;
 
@@ -46,6 +47,16 @@ namespace SilentNight.Gifts
         [SerializeField] private float tickInterval = 4.2f;
         [SerializeField] private float tickLoudness = 38f;
         [SerializeField] private float windupKeySpinSpeed = 230f; // deg/s
+        [Tooltip("Seconds of soft ticking after a wind-up; then the box rings loudly. Picking it up re-winds it.")]
+        [SerializeField] private float windupDuration = 35f;
+        [SerializeField] private float ringLoudness = 62f;
+        [SerializeField] private int ringBursts = 4;
+        [SerializeField] private float ringInterval = 0.45f;
+
+        [Header("Fragile gift (glass snow globe)")]
+        [Tooltip("Impact speed that shatters the globe (a careful drop survives, a fall from a tumbling elf does not).")]
+        [SerializeField] private float fragileBreakSpeed = 3.4f;
+        [SerializeField] private float shatterLoudness = 82f;
 
         [Header("Drop")]
         [Tooltip("Seconds the gift ignores the holder's colliders after being dropped/thrown.")]
@@ -64,6 +75,9 @@ namespace SilentNight.Gifts
         public bool IsHeld { get; private set; }
         public bool IsInSack { get; private set; }
         public bool IsDelivered { get; private set; }
+        public bool IsBroken { get; private set; }
+        /// <summary>Seconds until the music box rings (Noisy only).</summary>
+        public float WindLeft => _windLeft;
         /// <summary>Player-facing name (Russian).</summary>
         public string Label => LabelFor(kind);
 
@@ -76,12 +90,16 @@ namespace SilentNight.Gifts
         private float _damageTimer;
         private float _noiseTimer;
         private float _tickTimer;
+        private float _windLeft;
+        private int _ringLeft;
+        private float _ringTimer;
 
         public static string LabelFor(GiftKind k) => k switch
         {
             GiftKind.Small => "Маленький подарок",
             GiftKind.Noisy => "Заводная шумная шкатулка",
             GiftKind.Huge => "Огромный велосипед в обёртке",
+            GiftKind.Fragile => "Стеклянный снежный шар",
             _ => "Подарок"
         };
 
@@ -90,6 +108,7 @@ namespace SilentNight.Gifts
             GiftKind.Small => massSmall,
             GiftKind.Noisy => massNoisy,
             GiftKind.Huge => massHuge,
+            GiftKind.Fragile => massFragile,
             _ => massSmall
         };
 
@@ -107,6 +126,7 @@ namespace SilentNight.Gifts
             _visual = GetComponent<GiftVisual>();
             Rebuild();
             _tickTimer = Random.Range(0f, tickInterval);
+            _windLeft = windupDuration * Random.Range(0.6f, 1f);
         }
 
         private void Rebuild()
@@ -156,7 +176,30 @@ namespace SilentNight.Gifts
                 if (_tickTimer >= tickInterval)
                 {
                     _tickTimer = 0f;
-                    GameEvents.RaiseNoise(new NoiseEvent(transform.position, tickLoudness, NoiseSource.NoisyGift, gameObject));
+                    GameEvents.RaiseNoise(new NoiseEvent(transform.position, tickLoudness * 0.6f, NoiseSource.NoisyGift, gameObject));
+                }
+
+                // The spring runs down: then it rings like an alarm clock until re-wound (pick it up) or put in the sack.
+                if (_ringLeft <= 0)
+                {
+                    _windLeft -= dt;
+                    if (_windLeft <= 0f)
+                    {
+                        _ringLeft = ringBursts;
+                        _ringTimer = 0f;
+                        GameEvents.RaiseToast("ДЗЗЗЫНЬ! Заводная шкатулка затрезвонила. Подкрутите ключ: возьмите её в руки.");
+                    }
+                }
+                else
+                {
+                    _ringTimer -= dt;
+                    if (_ringTimer <= 0f)
+                    {
+                        _ringTimer = ringInterval;
+                        _ringLeft--;
+                        GameEvents.RaiseNoise(new NoiseEvent(transform.position, ringLoudness, NoiseSource.NoisyGift, gameObject));
+                        if (_ringLeft <= 0) _windLeft = windupDuration;
+                    }
                 }
             }
 
@@ -169,6 +212,11 @@ namespace SilentNight.Gifts
             if (IsHeld || IsInSack || IsDelivered) return;
 
             float speed = collision.relativeVelocity.magnitude;
+            if (kind == GiftKind.Fragile && !IsBroken && speed >= fragileBreakSpeed)
+            {
+                Shatter(collision.contactCount > 0 ? collision.GetContact(0).point : transform.position);
+                return;
+            }
             if (speed < noiseSpeedThreshold) return;
 
             // Noise scaled by impact speed.
@@ -196,6 +244,17 @@ namespace SilentNight.Gifts
             }
         }
 
+        private void Shatter(Vector3 at)
+        {
+            IsBroken = true;
+            integrity = 0f;
+            _noiseTimer = noiseCooldown;
+            GameEvents.RaiseNoise(new NoiseEvent(at, shatterLoudness, NoiseSource.GiftImpact, gameObject));
+            GameEvents.RaiseGiftDamaged(this, integrity);
+            GameEvents.RaiseToast("Дзынь! Снежный шар разбился. Доставить можно, но чаевых за него не будет.");
+            _visual.ShowBroken();
+        }
+
         // ---------------- ICarryable actions ----------------
 
         public void OnPickedUp(Transform holdPoint)
@@ -203,6 +262,12 @@ namespace SilentNight.Gifts
             SetIgnoreHolder(false);
             IsHeld = true;
             IsInSack = false;
+            if (kind == GiftKind.Noisy)
+            {
+                // Picking the music box up re-winds the key and stops any ringing.
+                _windLeft = windupDuration;
+                _ringLeft = 0;
+            }
 
             _rb.interpolation = RigidbodyInterpolation.None; // child of a moving rig: no interpolation fight
             if (!_rb.isKinematic)

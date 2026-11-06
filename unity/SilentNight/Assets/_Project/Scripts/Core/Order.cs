@@ -36,6 +36,7 @@ namespace SilentNight.Core
             o.Gifts.Add(GiftKind.Small);
             if (rng.NextDouble() < 0.7) o.Gifts.Add(GiftKind.Noisy);
             if (rng.NextDouble() < 0.6) o.Gifts.Add(GiftKind.Small);
+            if (rng.NextDouble() < 0.5) o.Gifts.Add(GiftKind.Fragile);
             o.Gifts.Add(GiftKind.Huge);
             o.Description = spooky
                 ? "РЕДКИЙ ЗАКАЗ (чаевые x2): в доме погас свет, в коридоре тикают старинные часы."

@@ -81,6 +81,28 @@ namespace SilentNight.Player
         public GameObject ModelPrefab { get => modelPrefab; set => modelPrefab = value; }
         public const string DefaultModelPath = "Assets/_Project/Art/Characters/Elf/Elf_Tripo.fbx";
 
+        private bool _hasPendingPush;
+        private Vector3 _pendingPush;
+
+        /// <summary>Knock the elf over (debug key, tests, hazards). Safe to call repeatedly: ignored while already limp,
+        /// several calls in one frame collapse into one fall. Works during get-up too (knocked down again).</summary>
+        public void GoLimp() => RequestLimp(Vector3.zero, false);
+
+        /// <summary>Same as GoLimp() but throws the pelvis with this velocity change (m/s) instead of the default
+        /// "along the movement" push.</summary>
+        public void GoLimp(Vector3 push) => RequestLimp(push, true);
+
+        private void RequestLimp(Vector3 push, bool custom)
+        {
+            if (_mode == Mode.Limp) return;
+            _wantLimp = true;
+            if (custom || !_hasPendingPush)
+            {
+                _pendingPush = push;
+                _hasPendingPush = custom;
+            }
+        }
+
         public bool IsLimp => _mode != Mode.Active;
         public Transform PelvisTransform => _pelvis != null ? _pelvis.T : null;
 
@@ -97,6 +119,7 @@ namespace SilentNight.Player
             {
                 _controller.Landed += OnLanded;
                 _controller.Teleported += SnapToRoot;
+                _controller.Bumped += OnBumped;
             }
         }
 
@@ -106,6 +129,7 @@ namespace SilentNight.Player
             {
                 _controller.Landed -= OnLanded;
                 _controller.Teleported -= SnapToRoot;
+                _controller.Bumped -= OnBumped;
             }
             if (_puppetRoot != null) Destroy(_puppetRoot.gameObject);
             for (int i = 0; i < _mats.Count; i++) if (_mats[i] != null) Destroy(_mats[i]);
@@ -491,7 +515,14 @@ namespace SilentNight.Player
 
         private void OnLanded(float fallSpeed)
         {
-            if (fallSpeed >= limpLandingSpeed) _wantLimp = true;
+            if (fallSpeed >= limpLandingSpeed) GoLimp();
+        }
+
+        /// <summary>Sprinted into a wall: bounce back off it and flop over.</summary>
+        private void OnBumped(float speedIntoWall)
+        {
+            Vector3 back = -transform.forward * Mathf.Clamp(speedIntoWall * 0.45f, 1f, 2.5f);
+            GoLimp(back + Vector3.up * 1.6f);
         }
 
         /// <summary>Move the whole puppet to the root (after teleports / scene start).</summary>
@@ -516,7 +547,7 @@ namespace SilentNight.Player
             if (!_built) return;
 
             if (Keyboard.current != null && Keyboard.current[ragdollDebugKey].wasPressedThisFrame && _mode == Mode.Active && PlayerGate.CanControl)
-                _wantLimp = true;
+                GoLimp();
 
             // Safety net: root was teleported (spawn, scene change) before we subscribed → don't let the spring fling the puppet.
             if ((_pelvis.T.position - transform.position).sqrMagnitude > 1f) SnapToRoot();
@@ -532,12 +563,14 @@ namespace SilentNight.Player
                     if (_modeTimer >= limpDuration && _pelvis.Rb.linearVelocity.magnitude < 1.2f) EnterGetUp();
                     break;
                 case Mode.GettingUp:
+                    if (_wantLimp) { EnterLimp(); break; } // knocked down again while getting up
                     _modeTimer += Time.deltaTime;
                     _strength = Mathf.Clamp01(_modeTimer / getUpDuration);
                     if (_strength >= 1f) ExitToActive();
                     break;
             }
             _wantLimp = false;
+            _hasPendingPush = false;
 
             // Gait / pose targets (drive joints only when not limp).
             AnimateJoints(Time.deltaTime);
@@ -545,15 +578,31 @@ namespace SilentNight.Player
 
         private void EnterLimp()
         {
-            Debug.Log("[ElfRagdoll] limp (fall/debug key)");
+            if (!_built || _mode == Mode.Limp) return;
+
+            // Butterfingers: a gift in hands flies off with the elf's momentum (fragile ones may break on impact).
+            DropHeldGift();
+
             _pelvis.Rb.constraints = RigidbodyConstraints.None;
             _mode = Mode.Limp;
             _modeTimer = 0f;
             _strength = 0f;
             if (_controller != null) _controller.InputLocked = true;
-            // Throw the body a little along the movement so the fall reads clearly.
-            if (_controller != null)
-                _pelvis.Rb.AddForce(_controller.Velocity.normalized * 3f + Vector3.up * 1.5f, ForceMode.VelocityChange);
+
+            Vector3 push;
+            if (_hasPendingPush) push = _pendingPush;
+            else if (_controller != null) push = _controller.Velocity.normalized * 3f + Vector3.up * 1.5f; // along the movement
+            else push = Vector3.up * 1.5f;
+            _pelvis.Rb.AddForce(push, ForceMode.VelocityChange);
+            _torso.Rb.AddForce(push * 0.6f, ForceMode.VelocityChange);
+            _hasPendingPush = false;
+            _wantLimp = false;
+        }
+
+        private void DropHeldGift()
+        {
+            if (_carry == null) _carry = GetComponent<ElfCarry>();
+            if (_carry != null && _carry.IsHoldingSomething) _carry.Drop();
         }
 
         private void FollowPelvisWithRoot()

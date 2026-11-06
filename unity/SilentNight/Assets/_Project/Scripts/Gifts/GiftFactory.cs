@@ -6,7 +6,7 @@ namespace SilentNight.Gifts
     /// <summary>Creates gift objects at runtime (conveyor in the hub, spawner in the house).</summary>
     public static class GiftFactory
     {
-        private static readonly GameObject[] ModelPrefabs = new GameObject[3];
+        private static readonly GameObject[] ModelPrefabs = new GameObject[System.Enum.GetValues(typeof(GiftKind)).Length];
 
         /// <summary>Optional: register a real model for a kind (null = placeholder). Call once, e.g. from a bootstrap.</summary>
         public static void RegisterModel(GiftKind kind, GameObject modelPrefab)

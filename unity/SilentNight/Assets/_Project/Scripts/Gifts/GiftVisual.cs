@@ -73,6 +73,7 @@ namespace SilentNight.Gifts
                 {
                     case GiftKind.Noisy: size = BuildNoisy(); break;
                     case GiftKind.Huge: size = BuildHuge(); break;
+                    case GiftKind.Fragile: size = BuildFragile(); break;
                     default: size = BuildSmall(); break;
                 }
                 SetupCollider(size, Vector3.zero);
@@ -124,6 +125,28 @@ namespace SilentNight.Gifts
             WindupKey = key;
 
             return new Vector3(0.46f, 0.46f, 0.46f);
+        }
+
+        private Renderer _globeGlass;
+
+        /// <summary>Glass snow globe on a wooden base with a tiny tree inside.</summary>
+        private Vector3 BuildFragile()
+        {
+            Material wood = Mat(new Color(0.45f, 0.27f, 0.14f)), glass = Mat(new Color(0.75f, 0.9f, 1f), 0f, 0.95f);
+            Material tree = Mat(new Color(0.15f, 0.55f, 0.28f)), snow = Mat(Color.white), ribbon = Mat(smallRibbon);
+            Part(PrimitiveType.Cylinder, wood, new Vector3(0f, -0.12f, 0f), new Vector3(0.3f, 0.05f, 0.3f));
+            Part(PrimitiveType.Cylinder, ribbon, new Vector3(0f, -0.075f, 0f), new Vector3(0.31f, 0.012f, 0.31f));
+            Part(PrimitiveType.Cylinder, snow, new Vector3(0f, -0.05f, 0f), new Vector3(0.22f, 0.02f, 0.22f));
+            Part(PrimitiveType.Capsule, tree, new Vector3(0f, 0.02f, 0f), new Vector3(0.08f, 0.07f, 0.08f));
+            Transform g = Part(PrimitiveType.Sphere, glass, new Vector3(0f, 0.03f, 0f), Vector3.one * 0.28f);
+            _globeGlass = g.GetComponent<Renderer>();
+            return new Vector3(0.3f, 0.32f, 0.3f);
+        }
+
+        /// <summary>Snow globe is cracked: cloudy grey glass.</summary>
+        public void ShowBroken()
+        {
+            if (_globeGlass != null) _globeGlass.sharedMaterial = Mat(new Color(0.45f, 0.47f, 0.5f), 0f, 0.3f);
         }
 
         private Vector3 BuildHuge()

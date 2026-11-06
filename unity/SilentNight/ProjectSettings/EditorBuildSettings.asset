@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/_Project/Scenes/Hub.unity
     guid: a5090e2a93a0c094699142ca41cd9007
   - enabled: 1
+    path: Assets/_Project/Scenes/Rooftop.unity
+    guid: f47e75381e853b24182b5d4c730b9f6d
+  - enabled: 1
     path: Assets/_Project/Scenes/House.unity
     guid: d925beda7e69b334993a243290e60a6c
   m_configObjects: {}

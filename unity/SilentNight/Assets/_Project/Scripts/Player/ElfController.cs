@@ -77,6 +77,19 @@ namespace SilentNight.Player
         [SerializeField] private float landingMaxFallSpeed = 14f;
         [SerializeField] private float noiseSmoothing = 3f;
 
+        [Header("Stumble (sprinting into a wall)")]
+        [Tooltip("Speed INTO the wall (m/s) needed to faceplant. Walk 2.5, sprint 3.8.")]
+        [SerializeField] private float bumpMinSpeed = 3.3f;
+        [Tooltip("Hits with |normal.y| above this are floors/ceilings/slopes, not walls.")]
+        [SerializeField] private float bumpMaxWallNormalY = 0.5f;
+        [Tooltip("A bump also needs the move to lose at least this fraction of the planar speed (filters glancing slides and steps).")]
+        [SerializeField] private float bumpMinSpeedLoss = 0.4f;
+        [Tooltip("Loose dynamic bodies lighter than this (gifts, toys) never cause a faceplant.")]
+        [SerializeField] private float bumpIgnoreRigidbodyMass = 5f;
+        [SerializeField] private float bumpCooldown = 2.5f;
+        [SerializeField] private float bumpNoise = 45f;
+        [SerializeField] private string bumpToast = "Бум! Эльф врезался в стену.";
+
         [Header("Misc")]
         [Tooltip("Pause key toggles GameServices.Flow.TogglePause().")]
         [SerializeField] private bool handlePauseInput = true;
@@ -111,6 +124,12 @@ namespace SilentNight.Player
         private Collider _lastGroundCollider;
         private SurfaceTag _lastGroundTag;
 
+        // stumble detection (filled by OnControllerColliderHit during _cc.Move)
+        private bool _collectHits;
+        private Vector3 _preMovePlanar;
+        private float _bestBumpSpeed;
+        private float _bumpCooldownTimer;
+
         private readonly RaycastHit[] _hits = new RaycastHit[16];
 
         // ---------------- events (for animator / visuals / audio inside the Player module) ----------------
@@ -120,6 +139,8 @@ namespace SilentNight.Player
         public event Action Teleported;
         /// <summary>Arg: loudness of the footstep noise raised.</summary>
         public event Action<float> Footstep;
+        /// <summary>Elf sprinted face-first into a wall/obstacle. Arg: speed into the wall (m/s). ElfRagdoll goes limp.</summary>
+        public event Action<float> Bumped;
 
         // ---------------- public read API ----------------
         /// <summary>Set by ElfRagdoll while the elf is limp: ignores movement input.</summary>
@@ -299,13 +320,25 @@ namespace SilentNight.Player
             bool wasGrounded = _grounded;
             if (!_grounded) _peakFallSpeed = Mathf.Max(_peakFallSpeed, -_verticalVelocity);
 
+            _preMovePlanar = _planarVelocity;
+            _bestBumpSpeed = 0f;
+            _collectHits = true;
             CollisionFlags flags = _cc.Move((_planarVelocity + Vector3.up * _verticalVelocity) * dt);
+            _collectHits = false;
 
+            if (_bumpCooldownTimer > 0f) _bumpCooldownTimer -= dt;
             if ((flags & CollisionFlags.Sides) != 0)
             {
-                // Kill momentum into walls (important on ice).
                 Vector3 actual = _cc.velocity;
                 actual.y = 0f;
+
+                // Faceplant: sprinting straight into a wall.
+                float preSpeed = _preMovePlanar.magnitude;
+                if (_bestBumpSpeed >= bumpMinSpeed && !_crouching && !InputLocked && _bumpCooldownTimer <= 0f
+                    && actual.magnitude <= preSpeed * (1f - bumpMinSpeedLoss))
+                    TriggerBump(_bestBumpSpeed);
+
+                // Kill momentum into walls (important on ice).
                 if (actual.sqrMagnitude < _planarVelocity.sqrMagnitude) _planarVelocity = actual;
             }
             if ((flags & CollisionFlags.Above) != 0 && _verticalVelocity > 0f) _verticalVelocity = 0f;
@@ -551,6 +584,31 @@ namespace SilentNight.Player
             float loud = GameConstants.NoiseLanding * Mathf.Lerp(0.35f, 1f, t) * SurfaceNoiseMultiplier() * BootsNoiseFactor;
             if (_surface == SurfaceType.CreakyWood) loud += GameConstants.NoiseCreakyFloorBonus * BootsNoiseFactor;
             RaiseNoise(loud, NoiseSource.Landing);
+        }
+
+        // ---------------- stumble ----------------
+
+        /// <summary>Called by the CharacterController during Move: remember the hardest wall impact of this move.</summary>
+        private void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            if (!_collectHits || hit.collider == null || IsSelf(hit.collider)) return;
+            if (Mathf.Abs(hit.normal.y) > bumpMaxWallNormalY) return;               // floor / ceiling / slope
+            Rigidbody body = hit.rigidbody;
+            if (body != null && !body.isKinematic && body.mass < bumpIgnoreRigidbodyMass) return; // loose light prop
+
+            Vector3 n = new Vector3(hit.normal.x, 0f, hit.normal.z);
+            if (n.sqrMagnitude < 0.0001f) return;
+            float into = Vector3.Dot(_preMovePlanar, -n.normalized);
+            if (into > _bestBumpSpeed) _bestBumpSpeed = into;
+        }
+
+        private void TriggerBump(float speedIntoWall)
+        {
+            _bumpCooldownTimer = bumpCooldown;
+            _sprinting = false;
+            RaiseNoise(bumpNoise, NoiseSource.Landing);
+            if (!string.IsNullOrEmpty(bumpToast)) GameEvents.RaiseToast(bumpToast);
+            Bumped?.Invoke(speedIntoWall);
         }
 
         private void UpdateNoiseLevel(float dt)

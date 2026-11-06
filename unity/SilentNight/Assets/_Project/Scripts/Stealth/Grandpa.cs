@@ -91,13 +91,31 @@ namespace SilentNight.Stealth
         [SerializeField] private float flashlightIntensity = 6f;   // URP non-physical intensity; tune in scene
         [SerializeField] private float flashlightChaseIntensity = 10f;
 
+        [Header("Readability")]
+        [Tooltip("World-space Zzz / ? / ! marker above his head plus a short word for what he heard.")]
+        [SerializeField] private bool showAlertIndicator = true;
+
         [Header("Debug")]
         [SerializeField] private bool drawGizmos = true;
+
+        private static readonly string[] CatchLines =
+        {
+            "Ах вы, мелкие воришки! Брысь отсюда!",
+            "Опять эльфы?! Где мой тапок!",
+            "Попался, ушастый! Сейчас как дам валенком!",
+            "Кто тут шуршит в моём доме?! А ну стоять!",
+            "Я же говорил бабке — эльфы существуют!",
+            "Ну всё, звоню Санте! Пусть забирает своих бандитов!"
+        };
 
         // ---------------- public read-only ----------------
         public AlertLevel Level => _level;
         public float Awareness => _awareness;
         public float Detection01 => Mathf.Clamp01(_detect);
+        /// <summary>World position of his head (follows the lying / sitting / standing pose). Used by the alert indicator.</summary>
+        public Vector3 IndicatorAnchor => HeadPosition;
+
+        private GrandpaAlertIndicator _indicator;
 
         // ---------------- state ----------------
         private NavMover _mover;
@@ -172,12 +190,18 @@ namespace SilentNight.Stealth
             _hasNoisePos = true;
             _awareness = Mathf.Clamp(_awareness + awarenessBoost, 0f, 100f);
             if (OutOfBed && _phase != Phase.Chasing) { _pendingInvestigate = true; _pendingNoisePos = position; }
+            if (_indicator != null && _phase != Phase.Chasing) _indicator.ShowWord("что это?!", 2f);
         }
 
         // ---------------- lifecycle ----------------
 
         private void OnEnable() => GameEvents.Noise += OnNoise;
         private void OnDisable() => GameEvents.Noise -= OnNoise;
+
+        private void OnDestroy()
+        {
+            if (_indicator != null) Destroy(_indicator.gameObject);
+        }
 
         private void Start() => Init();
 
@@ -226,6 +250,7 @@ namespace SilentNight.Stealth
             UpdateVisual();
             if (visual != null) visual.SnapPose();
             SetLevel(AlertLevel.Asleep);
+            if (showAlertIndicator && _indicator == null) _indicator = GrandpaAlertIndicator.Create(this);
         }
 
         // ---------------- hearing ----------------
@@ -241,6 +266,9 @@ namespace SilentNight.Stealth
 
             if (heard >= _heard) { _lastNoisePos = e.Position; _hasNoisePos = true; }
             _heard = Mathf.Max(_heard, heard);
+
+            // Readability: tell the player WHAT he heard (he already knows where the elf is while chasing).
+            if (_indicator != null && _phase != Phase.Chasing) _indicator.ShowHeard(e.Source, heard);
 
             // A single loud bang wakes him straight up.
             if (heard >= GameConstants.GrandpaWakeThreshold)
@@ -599,6 +627,11 @@ namespace SilentNight.Stealth
             _mover.FaceTowards(playerPos, 1f, 100f); // snap to face the elf
             if (_caughtRaised) return;
             _caughtRaised = true;
+
+            // Comic beat before the game-over flow.
+            GameEvents.RaiseToast(CatchLines[Random.Range(0, CatchLines.Length)]);
+            if (_indicator != null) _indicator.ShowWord("Попался!", 5f);
+
             SetLevel(AlertLevel.Chasing);
             GameEvents.RaisePlayerCaught("Дед тебя поймал!");
         }

@@ -389,6 +389,8 @@ namespace SilentNight.EditorTools
             var vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.x = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+            vel.y = new ParticleSystem.MinMaxCurve(-0.1f, 0.1f); // all axes must use the same curve mode
+            vel.z = new ParticleSystem.MinMaxCurve(-0.2f, 0.2f);
             vel.space = ParticleSystemSimulationSpace.World;
 
             Shader sh2 = Shader.Find("Universal Render Pipeline/Particles/Unlit");
@@ -484,6 +486,13 @@ namespace SilentNight.EditorTools
             // Squeaky toy on the carpet.
             Ball(env, "SqueakyToy", new Vector3(7.0f, 0.12f, 4.6f), Vector3.one * 0.22f, ProjectBootstrap.MatRed);
             NoiseZoneAt(new Vector3(7.0f, 0.3f, 4.6f), new Vector3(0.9f, 0.6f, 0.9f), NoiseSource.Object, 40f, 2f);
+            // Toys on the floor: trip the elf unless it sneaks [C] over them.
+            Toy(env, "ToyCar", new Vector3(7.8f, 0f, 5.4f), 25f, new Vector3(0.40f, 0.20f, 0.30f), ProjectBootstrap.MatRed, null);
+            Toy(env, "ToyBlocks", new Vector3(4.0f, 0f, 5.2f), 0f, new Vector3(0.60f, 0.20f, 0.50f), ProjectBootstrap.MatGold, "Хрусть! Эльф споткнулся о кубики.");
+            Toy(env, "ToyCar2", new Vector3(2.5f, 0f, 8.5f), -40f, new Vector3(0.40f, 0.20f, 0.30f), ProjectBootstrap.MatGreen, null);
+            Toy(env, "RubberDuck", new Vector3(6.0f, 0f, -4.5f), 0f, new Vector3(0.35f, 0.20f, 0.30f), ProjectBootstrap.MatGold, "Пиии! Эльф наступил на резиновую уточку.");
+            Toy(env, "ToyTrain", new Vector3(-1.75f, 0f, 3.0f), 90f, new Vector3(0.50f, 0.20f, 0.40f), ProjectBootstrap.MatRed, "Ту-ту! Эльф наступил на игрушечный паровозик.");
+
             // Garland along the north wall (cozy only).
             var garland = new GameObject("Garland").transform;
             garland.SetParent(moodProps, false);
@@ -749,7 +758,7 @@ namespace SilentNight.EditorTools
         private static void SaveAndBake(Scene scene, string path)
         {
             EditorSceneManager.SaveScene(scene, path);
-            if (!BakeEnvironmentLighting) return;
+            if (!BakeEnvironmentLighting || Application.isBatchMode) return; // batch builds (CI / tests) skip the bake
             try
             {
                 // Generates the ambient probe / reflection for the Trilight environment (no lightmaps: GI is off).
@@ -860,6 +869,30 @@ namespace SilentNight.EditorTools
         }
 
         /// <summary>Cube at a world position (parents are never scaled).</summary>
+        /// <summary>Small floor toy (visual only) + trigger with a TripHazard.</summary>
+        private static void Toy(Transform parent, string name, Vector3 floorPos, float yaw, Vector3 trigger, string mat, string toast)
+        {
+            var root = new GameObject(name);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(floorPos, Quaternion.Euler(0f, yaw, 0f));
+            GameObject body = Box(root.transform, name + "Body", floorPos + Vector3.up * 0.06f, new Vector3(trigger.x * 0.7f, 0.1f, trigger.z * 0.6f), mat, false, yaw);
+            body.transform.SetParent(root.transform, true);
+            Ball(root.transform, name + "Wheel", floorPos + Vector3.up * 0.13f, new Vector3(trigger.x * 0.35f, 0.08f, trigger.z * 0.35f), ProjectBootstrap.MatDark);
+            var col = root.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = trigger;
+            col.center = new Vector3(0f, trigger.y * 0.5f, 0f);
+            int ignore = LayerMask.NameToLayer("Ignore Raycast");
+            if (ignore >= 0) root.layer = ignore; // keep it out of the NavMesh and camera collisions
+            var hazard = root.AddComponent<SilentNight.Player.TripHazard>();
+            if (!string.IsNullOrEmpty(toast))
+            {
+                var so = new SerializedObject(hazard);
+                SerializedProperty p = so.FindProperty("toastText");
+                if (p != null) { p.stringValue = toast; so.ApplyModifiedPropertiesWithoutUndo(); }
+            }
+        }
+
         private const string EnvRoot = "Assets/_Project/Art/Environment/";
 
         /// <summary>Instantiates a prepared environment FBX (pivot = floor centre). Returns null if the asset is missing.</summary>

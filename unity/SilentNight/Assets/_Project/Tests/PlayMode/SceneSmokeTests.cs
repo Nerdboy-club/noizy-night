@@ -1,0 +1,156 @@
+#if UNITY_EDITOR
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using NUnit.Framework;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
+
+namespace SilentNight.Tests
+{
+    /// <summary>
+    /// Smoke tests for the built scenes (run: Unity -batchmode -runTests -testPlatform PlayMode).
+    /// Game code lives in Assembly-CSharp, which an asmdef cannot reference, so types are reached by reflection.
+    /// Any Debug.LogError / exception during a test fails it.
+    /// </summary>
+    public class SceneSmokeTests
+    {
+        private const string Scenes = "Assets/_Project/Scenes/";
+
+        private static Type T(string fullName) => Type.GetType(fullName + ", Assembly-CSharp", true);
+
+        private static Component Find(string fullName) => (Component)Object.FindAnyObjectByType(T(fullName));
+
+        private static Object[] FindAll(string fullName) => Object.FindObjectsByType(T(fullName), FindObjectsSortMode.None);
+
+        private static object Get(object o, string prop) => o.GetType().GetProperty(prop).GetValue(o);
+
+        private static void SetMove(Vector2? v) => T("SilentNight.Player.ElfInput").GetField("DebugMoveOverride").SetValue(null, v);
+
+        private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0f, v.z);
+
+        private static IEnumerator Load(string scene)
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode(Scenes + scene + ".unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return null;
+        }
+
+        private static Transform Pelvis()
+        {
+            Component rag = Find("SilentNight.Player.ElfRagdoll");
+            Assert.NotNull(rag, "ElfRagdoll missing");
+            return (Transform)Get(rag, "PelvisTransform");
+        }
+
+        [UnityTearDown]
+        public IEnumerator TearDown()
+        {
+            SetMove(null);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Hub_ElfStandsAndWalks()
+        {
+            yield return Load("Hub");
+            yield return new WaitForSeconds(2f);
+
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Assert.NotNull(ctrl, "ElfController missing");
+            Transform pelvis = Pelvis();
+            Assert.NotNull(pelvis, "ragdoll pelvis missing");
+
+            float h = pelvis.position.y - ctrl.transform.position.y;
+            Assert.That(h, Is.InRange(0.12f, 0.45f), "pelvis height above the feet while standing");
+            Assert.Greater(Vector3.Dot(pelvis.up, Vector3.up), 0.8f, "pelvis upright while standing");
+
+            Vector3 start = ctrl.transform.position;
+            SetMove(new Vector2(0f, 1f));
+            yield return new WaitForSeconds(2f);
+
+            float moved = Vector3.Distance(Flat(start), Flat(ctrl.transform.position));
+            Debug.Log($"[Smoke] walked {moved:0.00} m in 2 s, pelvis lag {Vector3.Distance(Flat(pelvis.position), Flat(ctrl.transform.position)):0.00} m");
+            Assert.Greater(moved, 2f, "elf walks forward");
+            Assert.Less(Vector3.Distance(Flat(pelvis.position), Flat(ctrl.transform.position)), 0.4f, "puppet keeps up with the controller");
+            Assert.Greater(Vector3.Dot(pelvis.up, Vector3.up), 0.8f, "pelvis upright while walking");
+            SetMove(null);
+        }
+
+        [UnityTest]
+        public IEnumerator Hub_LimpThenGetsUp()
+        {
+            yield return Load("Hub");
+            yield return new WaitForSeconds(1f);
+            Component rag = Find("SilentNight.Player.ElfRagdoll");
+            rag.GetType().GetMethod("GoLimp", Type.EmptyTypes).Invoke(rag, null);
+            yield return new WaitForSeconds(0.5f);
+            Assert.IsTrue((bool)Get(rag, "IsLimp"), "goes limp");
+            yield return new WaitForSeconds(4f);
+            Assert.IsFalse((bool)Get(rag, "IsLimp"), "gets back up");
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Transform pelvis = Pelvis();
+            Assert.That(pelvis.position.y - ctrl.transform.position.y, Is.InRange(0.1f, 0.5f), "standing again");
+            Assert.Greater(Vector3.Dot(pelvis.up, Vector3.up), 0.8f, "upright again");
+        }
+
+        [UnityTest]
+        public IEnumerator Rooftop_HasOneTargetChimney()
+        {
+            yield return Load("Rooftop");
+            yield return new WaitForSeconds(1f);
+            Object[] chimneys = FindAll("SilentNight.Rooftop.RooftopChimney");
+            Assert.That(chimneys.Length, Is.GreaterThanOrEqualTo(10), "chimney count");
+            int targets = 0;
+            var numbers = new HashSet<int>();
+            foreach (Object c in chimneys)
+            {
+                if ((bool)Get(c, "IsTarget")) targets++;
+                int n = (int)Get(c, "HouseNumber");
+                Assert.Greater(n, 0, "every chimney has a number");
+                Assert.IsTrue(numbers.Add(n), "house numbers are unique");
+            }
+            Assert.AreEqual(1, targets, "exactly one target chimney");
+            Assert.NotNull(Find("SilentNight.Player.ElfController"), "elf spawned on the roof");
+        }
+
+        [UnityTest]
+        public IEnumerator House_HasNpcsTreeAndStandingElf()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(2f);
+            Assert.NotNull(Find("SilentNight.Stealth.Grandpa"), "Grandpa");
+            Assert.NotNull(Find("SilentNight.Stealth.FatCat"), "cat");
+            Assert.NotNull(Find("SilentNight.Gifts.TreeDropZone"), "tree drop zone");
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Transform pelvis = Pelvis();
+            Assert.That(pelvis.position.y - ctrl.transform.position.y, Is.InRange(0.1f, 0.5f), "elf standing in the house");
+        }
+        [UnityTest]
+        public IEnumerator House_WalkingOverToyTripsTheElf()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1.5f);
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Component rag = Find("SilentNight.Player.ElfRagdoll");
+            // Stand on the toy car and start walking: the trigger fires while moving faster than the trip speed.
+            ctrl.GetType().GetMethod("Teleport").Invoke(ctrl, new object[] { new Vector3(7.8f, 0.02f, 5.4f), Quaternion.identity, true });
+            yield return new WaitForSeconds(0.3f);
+            SetMove(new Vector2(0f, 1f));
+            float t = 0f;
+            bool limp = false;
+            while (t < 1.5f && !limp)
+            {
+                t += Time.deltaTime;
+                limp = (bool)Get(rag, "IsLimp");
+                yield return null;
+            }
+            SetMove(null);
+            Assert.IsTrue(limp, "walking over a toy car trips the elf");
+        }
+    }
+}
+#endif
