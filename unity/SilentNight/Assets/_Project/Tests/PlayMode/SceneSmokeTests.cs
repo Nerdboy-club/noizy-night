@@ -172,6 +172,40 @@ namespace SilentNight.Tests
             }
             Assert.AreEqual(total, (int)Get(tree, "Delivered"), "every gift counted as delivered");
         }
+        [UnityTest]
+        public IEnumerator House_HugeBikeGetsStuckOnTheWall()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1.5f);
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Component carry = Find("SilentNight.Player.ElfCarry");
+            Component spawner = Find("SilentNight.Gifts.HouseGiftSpawner");
+            object bike = null;
+            foreach (object g in (System.Collections.IList)spawner.GetType().GetField("SpawnedGifts").GetValue(spawner))
+                if (Get(g, "Kind").ToString() == "Huge") bike = g;
+            Assume.That(bike != null, "order without a bike");
+
+            // Hallway (x -3.5..0), facing the east wall (x = 0) with the bike held across.
+            ctrl.GetType().GetMethod("Teleport").Invoke(ctrl, new object[] { new Vector3(-1.75f, 0.02f, -8f), Quaternion.Euler(0f, 90f, 0f), true });
+            Component rig = Find("SilentNight.Player.ThirdPersonCameraRig");
+            rig.GetType().GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(rig, 90f);
+            Assert.IsTrue((bool)carry.GetType().GetMethod("TryPickUp").Invoke(carry, new[] { bike }), "pick up the bike");
+            yield return new WaitForSeconds(0.3f);
+
+            SetMove(new Vector2(0f, 1f));
+            bool blocked = false;
+            float t = 0f;
+            while (t < 3f && !blocked)
+            {
+                rig.GetType().GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(rig, 90f);
+                blocked = (bool)Get(ctrl, "HugeGiftBlocked");
+                t += Time.deltaTime;
+                yield return null;
+            }
+            SetMove(null);
+            Assert.IsTrue(blocked, "the bike stops at the wall instead of clipping through");
+            Assert.Less(ctrl.transform.position.x, -0.1f, "elf did not pass into the wall");
+        }
     }
 }
 #endif

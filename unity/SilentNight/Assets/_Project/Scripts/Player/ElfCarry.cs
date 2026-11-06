@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SilentNight.Core;
+using SilentNight.Gifts;
 using UnityEngine;
 
 namespace SilentNight.Player
@@ -90,6 +91,43 @@ namespace SilentNight.Player
                 }
                 return hands * sack;
             }
+        }
+
+        // Cached lookup for the held Huge gift's box (refreshed when Held changes).
+        private ICarryable _boxSource;
+        private Gift _boxGift;
+        private BoxCollider _boxCollider;
+
+        /// <summary>
+        /// World-space box of the held Huge gift (the bike) as it sits at the hold point right now.
+        /// The gift's colliders are disabled while held, so ElfController uses this to test clearance itself.
+        /// Returns false when not carrying a Huge gift. No allocations.
+        /// </summary>
+        public bool TryGetHugeBox(out Vector3 worldCenter, out Quaternion worldRotation, out Vector3 halfExtents,
+            out Transform giftRoot)
+        {
+            worldCenter = Vector3.zero;
+            worldRotation = Quaternion.identity;
+            halfExtents = Vector3.zero;
+            giftRoot = null;
+            if (!IsCarryingHuge) return false;
+
+            if (!ReferenceEquals(_boxSource, Held))
+            {
+                _boxSource = Held;
+                _boxGift = Held as Gift;
+                if (_boxGift == null && Held.GameObject != null) _boxGift = Held.GameObject.GetComponent<Gift>();
+                _boxCollider = _boxGift != null ? _boxGift.GetComponent<BoxCollider>() : null;
+            }
+            if (_boxGift == null || !_boxGift.IsHeld) return false;
+
+            Transform t = _boxGift.transform;
+            Vector3 localCenter = _boxCollider != null ? _boxCollider.center : Vector3.zero;
+            worldCenter = t.TransformPoint(localCenter);
+            worldRotation = t.rotation;
+            halfExtents = _boxGift.HalfExtents;
+            giftRoot = t;
+            return halfExtents.x > 0f && halfExtents.y > 0f && halfExtents.z > 0f;
         }
 
         public bool SackContains(ICarryable item)

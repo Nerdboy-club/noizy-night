@@ -90,6 +90,16 @@ namespace SilentNight.Player
         [SerializeField] private float bumpNoise = 45f;
         [SerializeField] private string bumpToast = "Бум! Эльф врезался в стену.";
 
+        [Header("Huge gift (wrapped bike) clearance")]
+        [Tooltip("The held bike's box is shrunk by this much on every side before the overlap test (lets it graze walls).")]
+        [SerializeField] private float hugeClearanceSkin = 0.02f;
+        [Tooltip("Ignore the bottom of the bike box below feet + max(this, stepOffset): floor, rugs and low steps never block it.")]
+        [SerializeField] private float hugeFloorClearance = 0.2f;
+        [SerializeField] private float hugeScrapeNoise = 35f;
+        [SerializeField] private float hugeScrapeCooldown = 0.6f;
+        [SerializeField] private float hugeStuckToastCooldown = 4f;
+        [SerializeField] private string hugeStuckToast = "Велосипед застрял в проёме! Разверните его боком.";
+
         [Header("Misc")]
         [Tooltip("Pause key toggles GameServices.Flow.TogglePause().")]
         [SerializeField] private bool handlePauseInput = true;
@@ -132,6 +142,17 @@ namespace SilentNight.Player
 
         private readonly RaycastHit[] _hits = new RaycastHit[16];
 
+        // huge gift clearance (box pose relative to the elf root, refreshed every frame while carrying the bike)
+        private readonly Collider[] _hugeOverlap = new Collider[16];
+        private int _hugeMask = ~0;
+        private Vector3 _hugeLocalCenter;
+        private Quaternion _hugeLocalRotation = Quaternion.identity;
+        private Vector3 _hugeHalfExtents;
+        private Transform _hugeGiftRoot;
+        private bool _hugeGiftBlocked;
+        private float _hugeScrapeTimer;
+        private float _hugeToastTimer;
+
         // ---------------- events (for animator / visuals / audio inside the Player module) ----------------
         public event Action Jumped;
         /// <summary>Arg: fall speed at impact (m/s).</summary>
@@ -153,6 +174,9 @@ namespace SilentNight.Player
         public bool IsExhausted => _exhausted;
         public float WalkSpeed => walkSpeed;
         public float SprintSpeed => sprintSpeed;
+        /// <summary>True when, this frame, the held Huge gift (bike) vetoed part of the elf's move or turn
+        /// because its box would have entered static geometry (door frames, walls, furniture).</summary>
+        public bool HugeGiftBlocked => _hugeGiftBlocked;
 
         // ---------------- IPlayerStatus ----------------
         public float Stamina01 => maxStamina > 0f ? Mathf.Clamp01(_stamina / maxStamina) : 0f;
@@ -182,6 +206,17 @@ namespace SilentNight.Player
 
             int playerLayer = LayerMask.NameToLayer(GameConstants.LayerPlayer);
             if (playerLayer >= 0) groundMask = groundMask.value & ~(1 << playerLayer);
+
+            _hugeMask = ~0 & ~Physics.IgnoreRaycastLayer;
+            ExcludeLayer(ref _hugeMask, GameConstants.LayerPlayer);
+            ExcludeLayer(ref _hugeMask, GameConstants.LayerGift);
+            ExcludeLayer(ref _hugeMask, GameConstants.LayerNPC);
+        }
+
+        private static void ExcludeLayer(ref int mask, string layerName)
+        {
+            int layer = LayerMask.NameToLayer(layerName);
+            if (layer >= 0) mask &= ~(1 << layer);
         }
 
         /// <summary>Siblings can be added after this component (PlayerSetup at runtime), so re-query lazily.</summary>
@@ -320,11 +355,54 @@ namespace SilentNight.Player
             bool wasGrounded = _grounded;
             if (!_grounded) _peakFallSpeed = Mathf.Max(_peakFallSpeed, -_verticalVelocity);
 
+            // Facing is computed before the move so the huge-gift clearance check can veto it.
+            Quaternion currentRot = transform.rotation;
+            Quaternion facingRot = currentRot;
+            bool wantsTurn = wishDir.sqrMagnitude > 0.0001f;
+            if (wantsTurn)
+            {
+                Quaternion targetRot = Quaternion.LookRotation(new Vector3(wishDir.x, 0f, wishDir.z), Vector3.up);
+                float turn = turnSpeedDegrees * (heavy ? heavyTurnFactor : 1f) * dt;
+                facingRot = Quaternion.RotateTowards(currentRot, targetRot, turn);
+            }
+
+            // Huge gift (bike): its colliders are off while held, so test its box against the level ourselves.
+            _hugeGiftBlocked = false;
+            bool hugeMoveBlocked = false;
+            bool hugeActive = false;
+            bool hugeWedged = false;
+            Vector3 preMovePos = transform.position;
+            if (_hugeScrapeTimer > 0f) _hugeScrapeTimer -= dt;
+            if (_hugeToastTimer > 0f) _hugeToastTimer -= dt;
+            if (_carry != null && _carry.IsCarryingHuge && SnapshotHugeBox())
+            {
+                hugeActive = true;
+                hugeWedged = HugeBoxOverlaps(preMovePos, currentRot);
+                // Already wedged (e.g. picked up inside a frame): don't veto anything so the player can wriggle free.
+                if (!hugeWedged) ResolveHugeGiftMotion(preMovePos, currentRot, ref facingRot, dt, ref hugeMoveBlocked);
+            }
+
             _preMovePlanar = _planarVelocity;
             _bestBumpSpeed = 0f;
             _collectHits = true;
             CollisionFlags flags = _cc.Move((_planarVelocity + Vector3.up * _verticalVelocity) * dt);
             _collectHits = false;
+
+            // The CharacterController may slide somewhere the prediction didn't test: verify, and undo the planar part.
+            if (hugeActive && !hugeWedged)
+            {
+                Vector3 moved = transform.position - preMovePos;
+                moved.y = 0f;
+                if (moved.sqrMagnitude > 1e-8f && HugeBoxOverlaps(transform.position, facingRot))
+                {
+                    _cc.Move(-moved);
+                    facingRot = currentRot;
+                    _planarVelocity = Vector3.zero;
+                    _hugeGiftBlocked = true;
+                    hugeMoveBlocked = true;
+                }
+            }
+            if (hugeMoveBlocked && wantsMove) OnHugeGiftScrape();
 
             if (_bumpCooldownTimer > 0f) _bumpCooldownTimer -= dt;
             if ((flags & CollisionFlags.Sides) != 0)
@@ -351,12 +429,7 @@ namespace SilentNight.Player
             if (_grounded) _peakFallSpeed = 0f;
 
             // ---- facing ----
-            if (wishDir.sqrMagnitude > 0.0001f)
-            {
-                Quaternion targetRot = Quaternion.LookRotation(new Vector3(wishDir.x, 0f, wishDir.z), Vector3.up);
-                float turn = turnSpeedDegrees * (heavy ? heavyTurnFactor : 1f) * dt;
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, turn);
-            }
+            if (wantsTurn) transform.rotation = facingRot;
 
             // ---- noise ----
             UpdateFootsteps(dt);
@@ -369,6 +442,105 @@ namespace SilentNight.Player
             Camera cam = Camera.main;
             if (cam != null) return cam.transform.eulerAngles.y;
             return transform.eulerAngles.y;
+        }
+
+        // ---------------- huge gift clearance ----------------
+
+        /// <summary>Store the held bike's box relative to the elf root, so it can be re-posed for candidate moves/turns.</summary>
+        private bool SnapshotHugeBox()
+        {
+            if (!_carry.TryGetHugeBox(out Vector3 center, out Quaternion rot, out Vector3 half, out Transform giftRoot))
+                return false;
+            Quaternion inv = Quaternion.Inverse(transform.rotation);
+            _hugeLocalCenter = inv * (center - transform.position);
+            _hugeLocalRotation = inv * rot;
+            _hugeHalfExtents = half;
+            _hugeGiftRoot = giftRoot;
+            return true;
+        }
+
+        /// <summary>Would the bike box overlap solid static geometry if the elf root stood at pos/rot?</summary>
+        private bool HugeBoxOverlaps(Vector3 pos, Quaternion rot)
+        {
+            Vector3 center = pos + rot * _hugeLocalCenter;
+            Quaternion boxRot = rot * _hugeLocalRotation;
+            float skin = Mathf.Max(0f, hugeClearanceSkin);
+            Vector3 half = new Vector3(
+                Mathf.Max(0.01f, _hugeHalfExtents.x - skin),
+                Mathf.Max(0.01f, _hugeHalfExtents.y - skin),
+                Mathf.Max(0.01f, _hugeHalfExtents.z - skin));
+
+            // Cut the bottom of the box off at feet + clearance so the floor and low steps never count.
+            Vector3 up = boxRot * Vector3.up;
+            if (up.y < 0f) up = -up;
+            if (up.y > 0.5f)
+            {
+                float minBottom = pos.y + Mathf.Max(hugeFloorClearance, _cc.stepOffset);
+                float bottom = center.y - half.y * up.y;
+                if (bottom < minBottom)
+                {
+                    float cut = (minBottom - bottom) / up.y;
+                    if (cut >= half.y * 2f - 0.02f) return false; // whole box is below the clearance line
+                    half.y -= cut * 0.5f;
+                    center += up * (cut * 0.5f);
+                }
+            }
+
+            int n = Physics.OverlapBoxNonAlloc(center, half, _hugeOverlap, boxRot, _hugeMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                Collider c = _hugeOverlap[i];
+                if (c == null || c.isTrigger || IsSelf(c)) continue;
+                if (_hugeGiftRoot != null && (c.transform == _hugeGiftRoot || c.transform.IsChildOf(_hugeGiftRoot))) continue;
+                Rigidbody body = c.attachedRigidbody;
+                if (body != null && !body.isKinematic) continue; // loose props are not door frames
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Veto the parts of this frame's move/turn that would push the bike into geometry:
+        /// full -> move without turning -> turn without moving -> neither. Modifies _planarVelocity and facingRot.
+        /// </summary>
+        private void ResolveHugeGiftMotion(Vector3 pos, Quaternion currentRot, ref Quaternion facingRot, float dt,
+            ref bool moveBlocked)
+        {
+            Vector3 planarDelta = _planarVelocity * dt;
+            bool moving = planarDelta.sqrMagnitude > 1e-8f;
+            bool turning = Quaternion.Angle(currentRot, facingRot) > 0.01f;
+            if (!moving && !turning) return;
+
+            Vector3 target = pos + planarDelta;
+            if (!HugeBoxOverlaps(moving ? target : pos, facingRot)) return;
+
+            _hugeGiftBlocked = true;
+            if (moving && turning)
+            {
+                if (!HugeBoxOverlaps(target, currentRot)) { facingRot = currentRot; return; }
+                if (!HugeBoxOverlaps(pos, facingRot)) { _planarVelocity = Vector3.zero; moveBlocked = true; return; }
+            }
+
+            facingRot = currentRot;
+            if (moving)
+            {
+                _planarVelocity = Vector3.zero;
+                moveBlocked = true;
+            }
+        }
+
+        private void OnHugeGiftScrape()
+        {
+            if (_hugeScrapeTimer <= 0f)
+            {
+                _hugeScrapeTimer = hugeScrapeCooldown;
+                RaiseNoise(hugeScrapeNoise, NoiseSource.GiftImpact);
+            }
+            if (_hugeToastTimer <= 0f && !string.IsNullOrEmpty(hugeStuckToast))
+            {
+                _hugeToastTimer = hugeStuckToastCooldown;
+                GameEvents.RaiseToast(hugeStuckToast);
+            }
         }
 
         // ---------------- stamina ----------------
