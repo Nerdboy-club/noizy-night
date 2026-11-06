@@ -871,7 +871,10 @@ class Game {
         // низкую мебель и пол игнорируем, чтобы камера не прыгала
         (c) => c.translation().y >= 1.0
       );
-      if (hit) allowed = Math.max(0.9, Math.min(this.cameraDistance, hit.timeOfImpact - 0.35));
+      // Если луч стартует внутри коллайдера (toi≈0, например у камина) — это не препятствие для камеры
+      if (hit && hit.timeOfImpact > 0.15) {
+        allowed = Math.max(1.6, Math.min(this.cameraDistance, hit.timeOfImpact - 0.35));
+      }
     }
 
     // Быстро приближаемся при препятствии, плавно отъезжаем обратно (независимо от FPS)

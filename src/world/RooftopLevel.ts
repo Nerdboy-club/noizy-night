@@ -22,6 +22,9 @@ export class RooftopLevel {
     // 2. Дымоход с теплым светом
     this.buildChimney();
 
+    // 2b. Декор: снежные шапки, гирлянда, звёзды, светящееся жерло трубы
+    this.buildRooftopDecor();
+
     // 3. Снегопад
     this.snowParticles = this.createSnowSystem();
     this.group.add(this.snowParticles);
@@ -35,7 +38,9 @@ export class RooftopLevel {
       if ((child as THREE.Mesh).isMesh) {
         const m = child as THREE.Mesh;
         const oldMat = m.material as THREE.MeshStandardMaterial;
-        if (oldMat && oldMat.color) {
+        // Материалы с эмиссией / особые (декор) оставляем как есть
+        const keep = (oldMat as THREE.MeshStandardMaterial).emissiveIntensity > 0 || m.userData.keepMaterial;
+        if (oldMat && oldMat.color && !keep) {
           m.material = createPeakMaterial(oldMat.color.getHex());
         }
       }
@@ -50,9 +55,9 @@ export class RooftopLevel {
 
     // Материалы
     const snowMat = new THREE.MeshStandardMaterial({
-      color: 0xe2e8f0,
-      roughness: 0.9,
-      metalness: 0.05
+      color: 0xf1f5f9,
+      roughness: 0.75,
+      metalness: 0.0
     });
     const brickMat = new THREE.MeshStandardMaterial({
       color: 0x991b1b,
@@ -141,7 +146,7 @@ export class RooftopLevel {
     chimney.add(holeMesh);
 
     // Уютный теплый свет из камина внутри трубы
-    const chimneyLight = new THREE.PointLight(0xff7700, 3.5, 6);
+    const chimneyLight = new THREE.PointLight(0xff7a1a, 6.0, 9, 1.5);
     chimneyLight.position.set(0, 1.2, 0);
     chimney.add(chimneyLight);
 
@@ -156,6 +161,127 @@ export class RooftopLevel {
     const body = this.physics.world.createRigidBody(bodyDesc);
     this.physics.world.createCollider(R.ColliderDesc.cuboid(0.9, 1.1, 0.9), body);
     this.bodies.push(body);
+  }
+
+  private buildRooftopDecor() {
+    const keep = <T extends THREE.Mesh>(m: T): T => {
+      m.userData.keepMaterial = true;
+      return m;
+    };
+    const cp = this.chimneyPosition;
+
+    // Снежная шапка на трубе
+    const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
+    const drifts: [number, number, number, number][] = [
+      [0, -1.0, 2.2, 0.25],
+      [0, 1.0, 2.2, 0.25],
+      [-1.0, 0, 0.25, 1.8],
+      [1.0, 0, 0.25, 1.8]
+    ];
+    drifts.forEach(([dx, dz, sx, sz]) => {
+      const d = keep(new THREE.Mesh(new THREE.BoxGeometry(sx, 0.16, sz), snowCapMat));
+      d.position.set(cp.x + dx, cp.y + 1.3, cp.z + dz);
+      this.group.add(d);
+    });
+
+    // Раскалённое жерло: эмиссивный диск (светится через bloom) + тёплое пятно на крыше
+    const ember = keep(
+      new THREE.Mesh(
+        new THREE.CircleGeometry(0.62, 20),
+        new THREE.MeshStandardMaterial({
+          color: 0xff6a00,
+          emissive: 0xff7a1a,
+          emissiveIntensity: 3.2,
+          side: THREE.DoubleSide
+        })
+      )
+    );
+    ember.rotation.x = -Math.PI / 2;
+    ember.position.set(cp.x, cp.y + 1.27, cp.z);
+    this.group.add(ember);
+
+    const glow = keep(
+      new THREE.Mesh(
+        new THREE.CircleGeometry(3.2, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xff8a2a,
+          transparent: true,
+          opacity: 0.16,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        })
+      )
+    );
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(cp.x, cp.y + 1.32, cp.z);
+    this.group.add(glow);
+
+    // Сугробы на скатах
+    const driftMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 });
+    const driftGeo = new THREE.SphereGeometry(1, 14, 10);
+    for (let i = 0; i < 14; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const d = keep(new THREE.Mesh(driftGeo, driftMat));
+      const t = (i / 14) * 2 - 1;
+      d.scale.set(0.8 + (i % 3) * 0.35, 0.18 + (i % 4) * 0.05, 0.9 + (i % 2) * 0.4);
+      d.position.set(side * (2.6 + (i % 4) * 1.5), 3.3 - (2.6 + (i % 4) * 1.5 - 1.75) * 0.24 + 0.15, t * 8);
+      d.receiveShadow = true;
+      this.group.add(d);
+    }
+
+    // Гирлянда вдоль конька (эмиссивные огоньки, без источников света)
+    const colors = [0xff5252, 0xffd166, 0x7dd3fc, 0x86efac];
+    const bulbMats = colors.map(
+      (c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 3.0 })
+    );
+    const bulbGeo = new THREE.SphereGeometry(0.09, 8, 8);
+    for (let i = 0; i < 24; i++) {
+      const z = -8.5 + i * (17 / 23);
+      const b = keep(new THREE.Mesh(bulbGeo, bulbMats[i % bulbMats.length]));
+      b.position.set(-1.7, 4.15 - Math.sin((i / 23) * Math.PI * 4) * 0.04, z);
+      this.group.add(b);
+      const b2 = keep(new THREE.Mesh(bulbGeo, bulbMats[(i + 2) % bulbMats.length]));
+      b2.position.set(1.7, 4.15, z);
+      this.group.add(b2);
+    }
+
+    // Сосульки на краях скатов
+    const iceMat = new THREE.MeshStandardMaterial({
+      color: 0xbfe3ff,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.25,
+      roughness: 0.1,
+      transparent: true,
+      opacity: 0.85
+    });
+    const iceGeo = new THREE.ConeGeometry(0.07, 0.4, 5);
+    for (let i = 0; i < 26; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const z = -8.4 + (i >> 1) * 1.3;
+      const ic = keep(new THREE.Mesh(iceGeo, iceMat));
+      ic.rotation.x = Math.PI;
+      ic.position.set(side * 11.6, 0.35 + (i % 3) * 0.05, z);
+      this.group.add(ic);
+    }
+
+    // Звёздное небо
+    const starCount = 260;
+    const sp = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const el = 0.15 + Math.random() * 1.2;
+      const r = 70;
+      sp[i * 3] = Math.cos(a) * Math.cos(el) * r;
+      sp[i * 3 + 1] = Math.sin(el) * r;
+      sp[i * 3 + 2] = Math.sin(a) * Math.cos(el) * r;
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    const stars = new THREE.Points(
+      sg,
+      new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true, fog: false, transparent: true, opacity: 0.9 })
+    );
+    this.group.add(stars);
   }
 
   private createSnowSystem(): THREE.Points {

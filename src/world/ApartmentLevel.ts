@@ -418,9 +418,7 @@ export class ApartmentLevel {
       const gx = -10 + (i % 14) * 1.5;
       const gz = i < 14 ? -10.5 : 0.0;
       const sag = Math.sin(((i % 14) / 13) * Math.PI) * 0.35;
-      const col = warmGoldColors[i % warmGoldColors.length];
       const bulb = new THREE.Mesh(bulbGeo, garlandMats[i % garlandMats.length]);
-      void col;
       bulb.position.set(gx, 3.85 - sag, gz);
       this.group.add(bulb);
       this.garlandBulbs.push(bulb);
@@ -446,7 +444,7 @@ export class ApartmentLevel {
       [-11.56, 2.5, 9, Math.PI / 2, 1.2, 0.9, 1],
       [-9, 2.5, 10.56, Math.PI, 1.5, 1.1, 2],
       [-1.5, 2.5, 10.56, Math.PI, 1.3, 1.0, 0],
-      [1, 2.5, -10.56, 0, 0.8, 1.0, 3],
+      [-0.4, 2.5, -10.56, 0, 0.8, 1.0, 3],
       [11.56, 2.5, -3, -Math.PI / 2, 1.5, 1.1, 1],
       [11.56, 2.5, -7.5, -Math.PI / 2, 1.2, 0.9, 0],
       [11.56, 2.5, 9, -Math.PI / 2, 1.0, 1.0, 3],
