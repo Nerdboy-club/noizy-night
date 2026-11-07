@@ -227,9 +227,9 @@ namespace SilentNight.Player
             if (_rig == null) _rig = GetComponent<ThirdPersonCameraRig>();
         }
 
-        private void OnEnable() => GameServices.RegisterLocalPlayer(this);
+        private void OnEnable() => GameServices.RegisterPlayer(this, isLocal: true);
 
-        private void OnDisable() => GameServices.UnregisterLocalPlayer(this);
+        private void OnDisable() => GameServices.UnregisterPlayer(this);
 
         private void Start()
         {

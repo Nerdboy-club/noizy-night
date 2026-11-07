@@ -20,9 +20,40 @@ namespace SilentNight.Core
         /// <summary>Gift kinds loaded into the sleigh in the hub; spawned in the house on arrival.</summary>
         public static readonly List<GiftKind> LoadedGifts = new List<GiftKind>();
 
+        private static readonly List<IPlayerStatus> _players = new List<IPlayerStatus>(4);
+        private static readonly List<IPlayerStatus> _localPlayers = new List<IPlayerStatus>(4);
+
+        /// <summary>All registered players (local and, later, remote), in registration order. Index with a for-loop to avoid allocations.</summary>
+        public static IReadOnlyList<IPlayerStatus> Players => _players;
+
         public static void RegisterProfile(PlayerProfile p) => Profile = p;
-        public static void RegisterLocalPlayer(IPlayerStatus p) => LocalPlayer = p;
-        public static void UnregisterLocalPlayer(IPlayerStatus p) { if (LocalPlayer == p) LocalPlayer = null; }
+
+        /// <summary>
+        /// Adds a player (no duplicates). LocalPlayer stays the first registered local player;
+        /// it is only assigned here when there is none yet.
+        /// </summary>
+        public static void RegisterPlayer(IPlayerStatus p, bool isLocal = true)
+        {
+            if (p == null) return;
+            if (!_players.Contains(p)) _players.Add(p);
+            if (isLocal && !_localPlayers.Contains(p)) _localPlayers.Add(p);
+            if (LocalPlayer == null && _localPlayers.Count > 0) LocalPlayer = _localPlayers[0];
+        }
+
+        /// <summary>Removes a player. If it was LocalPlayer, the next registered local player (or null) takes over.</summary>
+        public static void UnregisterPlayer(IPlayerStatus p)
+        {
+            if (p == null) return;
+            _players.Remove(p);
+            _localPlayers.Remove(p);
+            if (LocalPlayer == p) LocalPlayer = _localPlayers.Count > 0 ? _localPlayers[0] : null;
+        }
+
+        /// <summary>Legacy single-player API; same as RegisterPlayer(p, isLocal: true).</summary>
+        public static void RegisterLocalPlayer(IPlayerStatus p) => RegisterPlayer(p, true);
+        /// <summary>Legacy single-player API; same as UnregisterPlayer(p).</summary>
+        public static void UnregisterLocalPlayer(IPlayerStatus p) => UnregisterPlayer(p);
+
         public static void RegisterFlow(GameFlow f) => Flow = f;
 
         public static void RegenerateOrders()
@@ -42,6 +73,7 @@ namespace SilentNight.Core
         {
             Profile = null; LocalPlayer = null; Flow = null; ActiveOrder = null; UIModalOpen = false;
             AvailableOrders.Clear(); LoadedGifts.Clear();
+            _players.Clear(); _localPlayers.Clear();
             GameEvents.ResetAll();
         }
     }
