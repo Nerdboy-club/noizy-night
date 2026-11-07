@@ -45,6 +45,14 @@ namespace SilentNight.Player
         [SerializeField] private float zoomStep = 0.3f;
         [SerializeField] private float distanceSmoothing = 10f;
 
+        [Header("Local co-op (shared screen)")]
+        [Tooltip("With more than one registered elf, follow their midpoint and pull back so everyone stays in view (clamped to maxZoom).")]
+        [SerializeField] private bool groupFraming = true;
+        [Tooltip("Extra distance (m) on top of the distance needed to fit the group's radius in the vertical FOV.")]
+        [SerializeField] private float groupPadding = 0.8f;
+        [Tooltip("Group radius never counts as smaller than this (m), so two elves side by side do not trigger a zoom.")]
+        [SerializeField] private float groupMinRadius = 0.6f;
+
         private ElfInput _input;
         private ElfController _controller;
         private float _yaw;
@@ -54,6 +62,12 @@ namespace SilentNight.Player
         private bool _createdCamera;
         private bool _createdPivot;
         private CinemachineThirdPersonFollow _follow;
+        private bool _grouped;
+        private Vector3 _groupCenter;
+        private float _groupRadius;
+
+        /// <summary>True while the rig frames several local elves (shared-screen co-op).</summary>
+        public bool IsFramingGroup => _grouped;
 
         /// <summary>Camera yaw in degrees (world). ElfController uses it for camera-relative movement.</summary>
         public float Yaw => _yaw;
@@ -206,11 +220,64 @@ namespace SilentNight.Player
             if (_input == null) _input = GetComponent<ElfInput>();
             if (_input != null) HandleInput();
 
-            float k = 1f - Mathf.Exp(-distanceSmoothing * Time.unscaledDeltaTime);
-            _distance = Mathf.Lerp(_distance, _targetDistance, k);
-            if (_follow != null) _follow.CameraDistance = _distance;
+            UpdatePivot(); // also refreshes the group frame used below
 
-            UpdatePivot();
+            float desired = _targetDistance;
+            if (_grouped) desired = Mathf.Clamp(Mathf.Max(desired, GroupFitDistance()), minZoom, maxZoom);
+
+            float k = 1f - Mathf.Exp(-distanceSmoothing * Time.unscaledDeltaTime);
+            _distance = Mathf.Lerp(_distance, desired, k);
+            if (_follow != null) _follow.CameraDistance = _distance;
+        }
+
+        // ---------------- local co-op group framing ----------------
+        // Shared screen only: extra local elves have no rig; this (player 1's) rig follows the midpoint of every
+        // registered player and pulls back to keep them in view. Mouse/stick look stays with player 1.
+        // TODO (step 2): optional split-screen (one Camera + CinemachineBrain + channel per player, Camera.rect),
+        // CinemachineTargetGroup/GroupFraming for a nicer fit, per-player HUD, Billboard facing the nearest camera.
+
+        /// <summary>Recomputes _grouped/_groupCenter/_groupRadius from GameServices.Players (allocation free).</summary>
+        private void RefreshGroupFrame()
+        {
+            _grouped = false;
+            if (!groupFraming) return;
+            var players = GameServices.Players;
+            if (players == null || players.Count < 2) return;
+
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            for (int i = 0; i < players.Count; i++)
+            {
+                IPlayerStatus p = players[i];
+                if (!PlayerGate.IsAlive(p)) continue;
+                Transform t = p.Transform;
+                if (t == null) continue;
+                sum += t.position;
+                n++;
+            }
+            if (n < 2) return;
+
+            Vector3 center = sum / n;
+            float r = 0f;
+            for (int i = 0; i < players.Count; i++)
+            {
+                IPlayerStatus p = players[i];
+                if (!PlayerGate.IsAlive(p)) continue;
+                Transform t = p.Transform;
+                if (t == null) continue;
+                r = Mathf.Max(r, Vector3.Distance(center, t.position));
+            }
+
+            _grouped = true;
+            _groupCenter = center;
+            _groupRadius = Mathf.Max(r, groupMinRadius);
+        }
+
+        /// <summary>Camera distance at which a sphere of the group radius fits the vertical FOV, plus padding.</summary>
+        private float GroupFitDistance()
+        {
+            float halfFov = Mathf.Clamp(fieldOfView, 10f, 170f) * 0.5f * Mathf.Deg2Rad;
+            return _groupRadius / Mathf.Tan(halfFov) + groupPadding;
         }
 
         private void HandleInput()
@@ -252,9 +319,11 @@ namespace SilentNight.Player
         private void UpdatePivot()
         {
             if (followTarget == null) return;
+            RefreshGroupFrame();
             bool crouch = _controller != null && _controller.IsCrouching;
             float h = crouch ? crouchPivotHeight : pivotHeight;
-            followTarget.SetPositionAndRotation(transform.position + Vector3.up * h, Quaternion.Euler(_pitch, _yaw, 0f));
+            Vector3 basePos = _grouped ? _groupCenter : transform.position;
+            followTarget.SetPositionAndRotation(basePos + Vector3.up * h, Quaternion.Euler(_pitch, _yaw, 0f));
         }
 
         private void OnTeleported()
