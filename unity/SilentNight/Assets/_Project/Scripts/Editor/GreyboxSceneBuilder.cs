@@ -622,7 +622,12 @@ namespace SilentNight.EditorTools
             Box(env, "SofaBack", new Vector3(8.5f, 0.7f, 10.45f), new Vector3(2.4f, 0.9f, 0.2f), ProjectBootstrap.MatFabric);
             Box(env, "SofaArmL", new Vector3(7.2f, 0.4f, 9.9f), new Vector3(0.2f, 0.8f, 0.9f), ProjectBootstrap.MatFabric);
             Box(env, "SofaArmR", new Vector3(9.8f, 0.4f, 9.9f), new Vector3(0.2f, 0.8f, 0.9f), ProjectBootstrap.MatFabric);
-            Box(env, "CoffeeTable", new Vector3(8.5f, 0.2f, 8.4f), new Vector3(1.2f, 0.4f, 0.6f), ProjectBootstrap.MatDarkWood);
+            // Coffee table on legs: an elf can crouch under it.
+            Box(env, "CoffeeTable", new Vector3(8.5f, 0.53f, 8.4f), new Vector3(1.2f, 0.06f, 0.6f), ProjectBootstrap.MatDarkWood);
+            foreach (float dx in new[] { -0.55f, 0.55f })
+                foreach (float dz in new[] { -0.25f, 0.25f })
+                    Box(env, "CoffeeTableLeg", new Vector3(8.5f + dx, 0.25f, 8.4f + dz), new Vector3(0.06f, 0.5f, 0.06f), ProjectBootstrap.MatDarkWood);
+            HideSpot(env, "HidingSpot_CoffeeTable", new Vector3(8.5f, 0.23f, 8.4f), new Vector3(1.05f, 0.5f, 0.48f), "под журнальным столиком");
             Box(env, "Armchair", new Vector3(1.8f, 0.3f, 9.6f), new Vector3(0.9f, 0.6f, 0.9f), ProjectBootstrap.MatRed);
             Box(env, "ArmchairBack", new Vector3(1.8f, 0.75f, 10.0f), new Vector3(0.9f, 0.9f, 0.15f), ProjectBootstrap.MatRed);
             Box(env, "Sideboard", new Vector3(11.6f, 0.45f, 8.5f), new Vector3(0.45f, 0.9f, 2.0f), ProjectBootstrap.MatDarkWood);
@@ -684,6 +689,7 @@ namespace SilentNight.EditorTools
             foreach (float dx in new[] { -0.8f, 0.8f })
                 foreach (float dz in new[] { -0.42f, 0.42f })
                     Box(env, "TableLeg", new Vector3(6.5f + dx, 0.365f, -5.5f + dz), new Vector3(0.08f, 0.73f, 0.08f), ProjectBootstrap.MatDarkWood);
+            HideSpot(env, "HidingSpot_KitchenTable", new Vector3(6.5f, 0.33f, -5.5f), new Vector3(1.65f, 0.7f, 0.85f), "под кухонным столом");
             Box(env, "ChairW", new Vector3(5.2f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
             Box(env, "ChairE", new Vector3(7.8f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
             Disc(env, "CatBed", new Vector3(3.2f, 0.015f, -2.6f), 0.9f, 0.03f, ProjectBootstrap.MatFabric, false);
@@ -692,11 +698,16 @@ namespace SilentNight.EditorTools
             flicker.Add(Point(env, "KitchenLight", new Vector3(6.5f, 2.6f, -5.5f), new Color(1f, 0.9f, 0.75f), 5f, 10f));
 
             // ---- Grandpa's bedroom (x -12..-3.5, z 4..11) ----
-            Box(env, "BedFrame", new Vector3(-10.4f, 0.2f, 8f), new Vector3(2.2f, 0.4f, 1.5f), ProjectBootstrap.MatDarkWood);
-            Box(env, "Mattress", new Vector3(-10.35f, 0.47f, 8f), new Vector3(2.0f, 0.14f, 1.4f), ProjectBootstrap.MatPaper);
+            // Bed on legs: crawl space underneath to hide right next to Grandpa.
+            Box(env, "BedFrame", new Vector3(-10.4f, 0.55f, 8f), new Vector3(2.2f, 0.1f, 1.5f), ProjectBootstrap.MatDarkWood);
+            foreach (float dx in new[] { -1.0f, 1.0f })
+                foreach (float dz in new[] { -0.65f, 0.65f })
+                    Box(env, "BedLeg", new Vector3(-10.4f + dx, 0.25f, 8f + dz), new Vector3(0.1f, 0.5f, 0.1f), ProjectBootstrap.MatDarkWood);
+            HideSpot(env, "HidingSpot_Bed", new Vector3(-10.4f, 0.23f, 8f), new Vector3(1.9f, 0.5f, 1.2f), "под кроватью Деда");
+            Box(env, "Mattress", new Vector3(-10.35f, 0.67f, 8f), new Vector3(2.0f, 0.14f, 1.4f), ProjectBootstrap.MatPaper);
             Box(env, "Headboard", new Vector3(-11.55f, 0.6f, 8f), new Vector3(0.1f, 1.2f, 1.6f), ProjectBootstrap.MatDarkWood);
-            Box(env, "Blanket", new Vector3(-9.95f, 0.565f, 8f), new Vector3(1.3f, 0.05f, 1.46f), ProjectBootstrap.MatRed, false);
-            Box(env, "Pillow", new Vector3(-11.15f, 0.6f, 8f), new Vector3(0.4f, 0.12f, 0.9f), ProjectBootstrap.MatPaper, false);
+            Box(env, "Blanket", new Vector3(-9.95f, 0.765f, 8f), new Vector3(1.3f, 0.05f, 1.46f), ProjectBootstrap.MatRed, false);
+            Box(env, "Pillow", new Vector3(-11.15f, 0.8f, 8f), new Vector3(0.4f, 0.12f, 0.9f), ProjectBootstrap.MatPaper, false);
             Box(env, "Nightstand", new Vector3(-11.5f, 0.3f, 6.6f), new Vector3(0.5f, 0.6f, 0.5f), ProjectBootstrap.MatDarkWood);
             Ball(env, "BedsideLamp", new Vector3(-11.5f, 0.75f, 6.6f), Vector3.one * 0.25f, ProjectBootstrap.MatEmissiveWarm);
             Box(env, "Wardrobe", new Vector3(-6.0f, 1.0f, 10.55f), new Vector3(1.6f, 2.0f, 0.6f), ProjectBootstrap.MatDarkWood);
@@ -1017,6 +1028,20 @@ namespace SilentNight.EditorTools
         }
 
         /// <summary>Cube at a world position (parents are never scaled).</summary>
+        /// <summary>Trigger volume under furniture where a crouching elf is hidden from Grandpa.</summary>
+        private static void HideSpot(Transform parent, string name, Vector3 center, Vector3 size, string label)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.position = center;
+            var bc = go.AddComponent<BoxCollider>();
+            bc.isTrigger = true;
+            bc.size = size;
+            int ignore = LayerMask.NameToLayer("Ignore Raycast");
+            if (ignore >= 0) go.layer = ignore;
+            go.AddComponent<HidingSpot>().Configure(label, true);
+        }
+
         /// <summary>Small floor toy (visual only) + trigger with a TripHazard.</summary>
         private static void Toy(Transform parent, string name, Vector3 floorPos, float yaw, Vector3 trigger, string mat, string toast)
         {

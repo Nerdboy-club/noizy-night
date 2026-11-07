@@ -30,6 +30,12 @@ namespace SilentNight.Stealth
         [Tooltip("Inside this cone a lit flashlight ignores darkness.")]
         [SerializeField, Range(1f, 179f)] private float flashlightAngle = 45f;
 
+        [Header("Hiding")]
+        [Tooltip("A player inside a HidingSpot is invisible unless this close (horizontal, from this transform). Bumping into Grandpa is still risky.")]
+        [SerializeField] private float hiddenRevealDistance = 0.8f;
+        [Tooltip("Visibility returned for a hidden player inside the reveal distance (ignores line of sight: the furniture would block the ray).")]
+        [SerializeField, Range(0f, 1f)] private float hiddenRevealVisibility = 1f;
+
         [Header("Line of sight")]
         [SerializeField] private LayerMask obstacleMask = Physics.DefaultRaycastLayers;
         [Tooltip("Strip NPC / Player / Gift / CameraIgnore layers from the obstacle mask at runtime.")]
@@ -74,21 +80,62 @@ namespace SilentNight.Stealth
             _mask = m;
         }
 
-        /// <summary>Visibility of the local player 0..1 (0 if no player registered).</summary>
+        public float HiddenRevealDistance { get => hiddenRevealDistance; set => hiddenRevealDistance = Mathf.Max(0f, value); }
+
+        /// <summary>
+        /// Highest visibility 0..1 among all registered players (0 if none). Players inside a HidingSpot are
+        /// skipped unless within hiddenRevealDistance. LastTargetPoint is the point of the most visible player.
+        /// </summary>
         public float Evaluate()
         {
-            if (!StealthUtil.TryGetPlayer(out Transform pt, out bool crouching))
+            float best = 0f;
+            Vector3 bestPoint = LastTargetPoint;
+            bool any = false;
+
+            int count = StealthUtil.PlayerCount;
+            for (int i = 0; i < count; i++)
             {
-                LastVisibility = 0f;
-                return 0f;
+                if (!StealthUtil.TryGetPlayerAt(i, out _, out Transform t, out bool c)) continue;
+                any = true;
+                float v = EvaluateTarget(t, c);
+                if (v > best)
+                {
+                    best = v;
+                    bestPoint = LastTargetPoint;
+                }
             }
-            LastVisibility = EvaluateTarget(pt, crouching);
-            return LastVisibility;
+
+            // Legacy path: player registered only as LocalPlayer (not in the Players list).
+            if (!any && StealthUtil.TryGetPlayer(out Transform pt, out bool crouching))
+            {
+                best = EvaluateTarget(pt, crouching);
+                bestPoint = LastTargetPoint;
+            }
+
+            LastTargetPoint = bestPoint;
+            LastVisibility = best;
+            return best;
+        }
+
+        /// <summary>True if the target is in a HidingSpot and farther than hiddenRevealDistance (= cannot be seen).</summary>
+        public bool IsTargetHidden(Transform target, bool crouching)
+        {
+            if (target == null || !HidingSpot.IsHidden(target, crouching)) return false;
+            return StealthUtil.HorizontalDistance(transform.position, target.position) > hiddenRevealDistance;
         }
 
         public float EvaluateTarget(Transform target, bool crouching)
         {
             if (target == null) return 0f;
+
+            if (HidingSpot.IsHidden(target, crouching))
+            {
+                if (StealthUtil.HorizontalDistance(transform.position, target.position) > hiddenRevealDistance) return 0f;
+                // Grandpa is right on top of the hiding elf: he notices regardless of furniture blocking the ray.
+                LastTargetPoint = target.position + Vector3.up * (crouching ? crouchChestHeight : chestHeight);
+                return hiddenRevealVisibility;
+            }
+
             Transform e = Eye;
             Vector3 origin = e.position;
             Vector3 point = target.position + Vector3.up * (crouching ? crouchChestHeight : chestHeight);
@@ -161,6 +208,9 @@ namespace SilentNight.Stealth
 
             Gizmos.color = new Color(1f, 0.4f, 0.2f, 0.6f);
             Gizmos.DrawWireSphere(o, nearSenseRadius);
+
+            Gizmos.color = new Color(0.3f, 1f, 0.5f, 0.6f);
+            Gizmos.DrawWireSphere(transform.position, hiddenRevealDistance);
 
             if (Application.isPlaying && LastVisibility > 0f)
             {

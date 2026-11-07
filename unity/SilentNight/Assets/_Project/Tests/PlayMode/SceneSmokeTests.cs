@@ -252,6 +252,22 @@ namespace SilentNight.Tests
             Assert.IsTrue(mantled, "elf grabbed the counter edge");
             Assert.Greater(p.y, 0.85f, "elf is standing on the counter");
         }
+        [UnityTest]
+        public IEnumerator House_CrouchingUnderTableHidesTheElf()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1f);
+            Type hs = T("SilentNight.Stealth.HidingSpot");
+            var isHidden = hs.GetMethod("IsHidden", new[] { typeof(Transform), typeof(bool) });
+            var probe = new GameObject("probe").transform;
+            probe.position = new Vector3(6.5f, 0f, -5.5f); // under the kitchen table
+            Assert.IsTrue((bool)isHidden.Invoke(null, new object[] { probe, true }), "crouching under the table hides");
+            Assert.IsFalse((bool)isHidden.Invoke(null, new object[] { probe, false }), "standing does not");
+            probe.position = new Vector3(6.5f, 0f, -3f);
+            Assert.IsFalse((bool)isHidden.Invoke(null, new object[] { probe, true }), "open floor does not");
+            probe.position = new Vector3(-10.4f, 0f, 8f);
+            Assert.IsTrue((bool)isHidden.Invoke(null, new object[] { probe, true }), "under Grandpa's bed hides");
+        }
     }
 }
 #endif
