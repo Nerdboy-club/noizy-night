@@ -1011,3 +1011,44 @@ Label {
     color: rgb(42, 20, 10);
 }
 .sn-stat__value--big { font-size: 52px; color: rgb(176, 122, 18); }
+
+/* ---- Results: comedic run recap ---- */
+.sn-recap {
+    width: 560px;
+    padding: 8px 20px 10px 20px;
+    margin-bottom: 14px;
+    background-color: rgb(255, 245, 222);
+    border-width: 3px;
+    border-bottom-width: 6px;
+    border-color: rgb(42, 20, 10);
+    border-radius: 16px;
+}
+.sn-recap__rank-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+}
+.sn-recap__rank-label {
+    font-size: 22px;
+    -unity-font-style: bold;
+    color: rgb(92, 60, 40);
+    margin-right: 8px;
+}
+.sn-recap__rank {
+    font-size: 28px;
+    -unity-font-style: bold;
+    color: rgb(42, 20, 10);
+    padding: 2px 12px 4px 12px;
+    border-radius: 10px;
+    background-color: rgb(176, 122, 18);
+}
+.sn-recap__rank--mouse { background-color: rgb(120, 180, 220); }
+.sn-recap__rank--ninja { background-color: rgb(110, 170, 90); }
+.sn-recap__rank--elephant { background-color: rgb(220, 110, 80); }
+.sn-recap__line {
+    font-size: 20px;
+    color: rgb(72, 44, 28);
+    white-space: normal;
+    padding: 1px 0 1px 0;
+}

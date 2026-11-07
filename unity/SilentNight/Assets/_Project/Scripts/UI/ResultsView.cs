@@ -13,6 +13,8 @@ namespace SilentNight.UI
         private Label _integrity;
         private Label _earned;
         private Label _bonus;
+        private Label _rank;
+        private readonly Label[] _recapLines = new Label[5];
 
         protected override VisualElement PopTarget => _dialog;
 
@@ -38,11 +40,24 @@ namespace SilentNight.UI
             _earned = UIFactory.Text("+0", "sn-stat__value sn-stat__value--big", r2);
             _bonus = UIFactory.Text("ЖУТКИЙ ДОМ: чаевые x2", "sn-dialog__bonus", _dialog);
 
+            // Comedic run recap (RunStats).
+            var recap = UIFactory.Ignored("sn-recap", _dialog);
+            var rankRow = UIFactory.Ignored("sn-recap__rank-row", recap);
+            UIFactory.Text("Звание:", "sn-recap__rank-label", rankRow);
+            _rank = UIFactory.Text("", "sn-recap__rank", rankRow);
+            for (int i = 0; i < _recapLines.Length; i++)
+                _recapLines[i] = UIFactory.Text("", "sn-recap__line", recap);
+
             UIFactory.Btn("На базу", () => GameEvents.RaiseRequestReturnToHub(), "sn-btn--green sn-btn--big", _dialog);
             return root;
         }
 
-        public override void Bind() => GameEvents.DeliveryCompleted += OnCompleted;
+        public override void Bind()
+        {
+            GameEvents.DeliveryCompleted += OnCompleted;
+            RunStats.Subscribe(); // idempotent; re-hooks after GameEvents.ResetAll()
+        }
+
         public override void Unbind() => GameEvents.DeliveryCompleted -= OnCompleted;
 
         protected override void OnShow()
@@ -63,6 +78,24 @@ namespace SilentNight.UI
             for (int i = 0; i < 3; i++)
                 _stars[i].SetColors(i < stars ? Palette.Gold : Palette.Unlit, Palette.GoldDark);
             _bonus.style.display = order != null && order.Mood == HouseMood.Spooky ? DisplayStyle.Flex : DisplayStyle.None;
+            FillRecap();
+        }
+
+        private void FillRecap()
+        {
+            var rank = RunStats.Rank;
+            _rank.text = RunStats.TitleFor(rank);
+            _rank.EnableInClassList("sn-recap__rank--mouse", rank == StealthRank.QuietAsMouse);
+            _rank.EnableInClassList("sn-recap__rank--ninja", rank == StealthRank.AlmostNinja);
+            _rank.EnableInClassList("sn-recap__rank--elephant", rank == StealthRank.BullInChinaShop);
+
+            var lines = RunStats.BuildRecapLines(_recapLines.Length);
+            for (int i = 0; i < _recapLines.Length; i++)
+            {
+                bool has = i < lines.Count;
+                _recapLines[i].text = has ? "• " + lines[i] : "";
+                _recapLines[i].style.display = has ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
     }
 }
