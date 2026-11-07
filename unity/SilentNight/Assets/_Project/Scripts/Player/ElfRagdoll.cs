@@ -86,6 +86,10 @@ namespace SilentNight.Player
         private bool _wantLimp;
 
         public GameObject ModelPrefab { get => modelPrefab; set => modelPrefab = value; }
+        private static GameObject s_sharedModel;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSharedModel() => s_sharedModel = null;
         public const string DefaultModelPath = "Assets/_Project/Art/Characters/Elf/Elf_Tripo.fbx";
 
         private bool _hasPendingPush;
@@ -321,7 +325,9 @@ namespace SilentNight.Player
 
         private void BuildModel()
         {
-            GameObject prefab = modelPrefab;
+            // Elves created at runtime (co-op joins) have no serialized model: reuse the one the scene elf brought.
+            if (modelPrefab != null) s_sharedModel = modelPrefab;
+            GameObject prefab = modelPrefab != null ? modelPrefab : s_sharedModel;
 #if UNITY_EDITOR
             if (prefab == null) prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(DefaultModelPath);
 #endif

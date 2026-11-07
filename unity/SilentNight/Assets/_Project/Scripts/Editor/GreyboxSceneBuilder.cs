@@ -693,7 +693,10 @@ namespace SilentNight.EditorTools
             Box(env, "ChairW", new Vector3(5.2f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
             Box(env, "ChairE", new Vector3(7.8f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
             Disc(env, "CatBed", new Vector3(3.2f, 0.015f, -2.6f), 0.9f, 0.03f, ProjectBootstrap.MatFabric, false);
-            NPCFactory.CreateCat(new Vector3(3.2f, 0f, -2.6f), Quaternion.Euler(0f, 90f, 0f));
+            GameObject catGo = NPCFactory.CreateCat(new Vector3(3.2f, 0f, -2.6f), Quaternion.Euler(0f, 90f, 0f));
+            // Serialize the cat model into the scene so player builds have it too (NPCVisual only auto-loads in the editor).
+            var catModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Characters/Cat/Cat.fbx");
+            if (catModel != null) catGo.GetComponent<NPCVisual>().Configure(NPCKind.Cat, catModel);
             Ball(env, "KitchenLamp", new Vector3(6.5f, 2.85f, -5.5f), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
             flicker.Add(Point(env, "KitchenLight", new Vector3(6.5f, 2.6f, -5.5f), new Color(1f, 0.9f, 0.75f), 5f, 10f));
 
