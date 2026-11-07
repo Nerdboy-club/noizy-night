@@ -80,6 +80,8 @@ namespace SilentNight.Stealth
 
         [Header("Catching")]
         [SerializeField] private float catchDistance = 1.0f;
+        [Tooltip("A hidden (crouching under furniture) elf can only be caught closer than this.")]
+        [SerializeField] private float hiddenCatchDistance = 0.6f;
         [SerializeField] private float catchHeight = 1.6f;
 
         [Header("Patrol / restless sleep (optional)")]
@@ -631,7 +633,7 @@ namespace SilentNight.Stealth
 
         private void TickChasing(float dt)
         {
-            if (!StealthUtil.TryGetPlayer(out Transform pt, out _))
+            if (!StealthUtil.TryGetPlayer(out Transform pt, out bool crouching))
             {
                 StartInvestigate(_lastSeenPos);
                 return;
@@ -639,7 +641,10 @@ namespace SilentNight.Stealth
 
             Vector3 pp = pt.position;
             Vector3 me = transform.position;
-            if (StealthUtil.HorizontalDistance(me, pp) <= catchDistance && Mathf.Abs(pp.y - me.y) < catchHeight)
+            float hd = StealthUtil.HorizontalDistance(me, pp);
+            // A crouching elf under furniture is only grabbed when Grandpa is right on top of it.
+            bool hiddenSafe = HidingSpot.IsHidden(pt, crouching) && hd > hiddenCatchDistance;
+            if (!hiddenSafe && hd <= catchDistance && Mathf.Abs(pp.y - me.y) < catchHeight)
             {
                 Catch(pp);
                 return;
