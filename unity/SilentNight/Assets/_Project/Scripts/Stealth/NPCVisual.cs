@@ -20,6 +20,10 @@ namespace SilentNight.Stealth
 
         [Header("Model (optional)")]
         [SerializeField] private GameObject modelPrefab;
+        [Tooltip("Controller for the model's Animator (FBX models import without one). Set by the scene builder.")]
+        [SerializeField] private RuntimeAnimatorController animatorController;
+
+        public RuntimeAnimatorController AnimatorController { get => animatorController; set => animatorController = value; }
         [SerializeField] private Vector3 modelLocalOffset = Vector3.zero;
         [SerializeField] private Vector3 modelLocalEuler = Vector3.zero;
         [SerializeField] private float modelScale = 1f;
@@ -222,6 +226,8 @@ namespace SilentNight.Stealth
                 Head = FindDeep(inst.transform, headTransformName);
                 Tail = FindDeep(inst.transform, tailTransformName);
                 if (animator == null) animator = inst.GetComponentInChildren<Animator>();
+                if (animator != null && animator.runtimeAnimatorController == null && animatorController != null)
+                    animator.runtimeAnimatorController = animatorController;
 #if UNITY_EDITOR
                 if (animator != null && animator.runtimeAnimatorController == null && kind == NPCKind.Cat)
                     animator.runtimeAnimatorController = UnityEditor.AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/_Project/Art/Characters/Cat/Cat.controller");

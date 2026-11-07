@@ -697,6 +697,8 @@ namespace SilentNight.EditorTools
             // Serialize the cat model into the scene so player builds have it too (NPCVisual only auto-loads in the editor).
             var catModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Characters/Cat/Cat.fbx");
             if (catModel != null) catGo.GetComponent<NPCVisual>().Configure(NPCKind.Cat, catModel);
+            var catCtrl = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/_Project/Art/Characters/Cat/Cat.controller");
+            if (catCtrl != null) catGo.GetComponent<NPCVisual>().AnimatorController = catCtrl;
             Ball(env, "KitchenLamp", new Vector3(6.5f, 2.85f, -5.5f), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
             flicker.Add(Point(env, "KitchenLight", new Vector3(6.5f, 2.6f, -5.5f), new Color(1f, 0.9f, 0.75f), 5f, 10f));
 
