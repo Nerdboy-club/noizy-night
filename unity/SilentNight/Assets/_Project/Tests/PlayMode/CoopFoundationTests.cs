@@ -140,6 +140,61 @@ namespace SilentNight.Tests
             Assert.IsTrue((bool)carryT.GetProperty("IsCarryingHuge").GetValue(p1), "front elf keeps the bike");
             UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
         }
+        [UnityTest]
+        public IEnumerator House_CoCarriedBikeStopsAtTheWall()
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/House.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(1f);
+            var pad = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>();
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            joinT.GetMethod("Join").Invoke(UnityEngine.Object.FindAnyObjectByType(joinT), new object[] { pad });
+            yield return new WaitForSeconds(1f);
+
+            Type carryT = Type.GetType("SilentNight.Player.ElfCarry, Assembly-CSharp", true);
+            Type inputT = Type.GetType("SilentNight.Player.ElfInput, Assembly-CSharp", true);
+            Type ctrlT = Type.GetType("SilentNight.Player.ElfController, Assembly-CSharp", true);
+            Component p1 = null, p2 = null;
+            foreach (var c in UnityEngine.Object.FindObjectsByType(carryT, FindObjectsSortMode.None))
+            {
+                var comp = (Component)c;
+                if ((int)inputT.GetProperty("PlayerIndex").GetValue(comp.GetComponent(inputT)) == 0) p1 = comp; else p2 = comp;
+            }
+            ctrlT.GetMethod("Teleport").Invoke(p1.GetComponent(ctrlT), new object[] { new Vector3(0.9f, 0.02f, -5f), Quaternion.Euler(0f, 90f, 0f), true }); // kitchen side of the hallway door
+            ctrlT.GetMethod("Teleport").Invoke(p2.GetComponent(ctrlT), new object[] { new Vector3(-0.9f, 0.02f, -5f), Quaternion.Euler(0f, -90f, 0f), true }); // hallway side
+            Type kindT = Type.GetType("SilentNight.Core.GiftKind, Assembly-CSharp", true);
+            var bike = (Component)Type.GetType("SilentNight.Gifts.GiftFactory, Assembly-CSharp", true).GetMethod("Create")
+                .Invoke(null, new object[] { Enum.Parse(kindT, "Huge"), new Vector3(1.6f, 0.6f, -5f), Quaternion.identity });
+            yield return null;
+            Assert.IsTrue((bool)carryT.GetMethod("TryPickUp").Invoke(p1, new object[] { bike }));
+            yield return null;
+            var handle = carryT.GetProperty("CoCarryHandle").GetValue(p1);
+            var interactor = p2.GetComponent(Type.GetType("SilentNight.Player.ElfInteractor, Assembly-CSharp", true));
+            handle.GetType().GetMethod("Interact").Invoke(handle, new object[] { interactor });
+            yield return null;
+            yield return null;
+
+            Type ccT = Type.GetType("SilentNight.Player.CoCarry, Assembly-CSharp", true);
+            Type rigT = Type.GetType("SilentNight.Player.ThirdPersonCameraRig, Assembly-CSharp", true);
+            var rig = UnityEngine.Object.FindAnyObjectByType(rigT);
+            var yaw = rigT.GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            inputT.GetField("DebugMoveOverride").SetValue(null, new Vector2(0f, 1f));
+            bool blocked = false;
+            float t = 0f;
+            while (t < 2.5f)
+            {
+                yaw.SetValue(rig, 0f); // p1 walks along the kitchen wall: the bike would cut through the door frame
+                object active = ccT.GetProperty("Active").GetValue(null);
+                if (active != null && (bool)ccT.GetProperty("Blocked").GetValue(active)) blocked = true;
+                t += Time.deltaTime;
+                yield return null;
+            }
+            inputT.GetField("DebugMoveOverride").SetValue(null, null);
+            Debug.Log("[Smoke] co-carry bike " + bike.transform.position + " p1 " + p1.transform.position + " p2 " + p2.transform.position + " active " + (ccT.GetProperty("Active").GetValue(null) != null));
+            Assert.IsTrue(blocked, "the shared bike jams in the door frame");
+            Assert.Less(p1.transform.position.z, -3.4f, "the front elf cannot just walk away along the wall");
+            UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
+        }
     }
 }
 #endif
