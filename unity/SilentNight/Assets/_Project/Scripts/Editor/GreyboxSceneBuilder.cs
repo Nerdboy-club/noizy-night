@@ -634,7 +634,8 @@ namespace SilentNight.EditorTools
             HideSpot(env, "HidingSpot_CoffeeTable", new Vector3(8.5f, 0.23f, 8.4f), new Vector3(1.05f, 0.5f, 0.48f), "под журнальным столиком");
             Box(env, "Armchair", new Vector3(1.8f, 0.3f, 9.6f), new Vector3(0.9f, 0.6f, 0.9f), ProjectBootstrap.MatRed);
             Box(env, "ArmchairBack", new Vector3(1.8f, 0.75f, 10.0f), new Vector3(0.9f, 0.9f, 0.15f), ProjectBootstrap.MatRed);
-            Box(env, "Sideboard", new Vector3(11.6f, 0.45f, 8.5f), new Vector3(0.45f, 0.9f, 2.0f), ProjectBootstrap.MatDarkWood);
+            // Old TV with the remote on the stand edge: knock the remote off and the TV hisses white noise.
+            SilentNight.Stealth.NoisyTV.Create(env, new Vector3(11.55f, 0f, 8.5f), -90f, Mat(ProjectBootstrap.MatDarkWood));
             // Squeaky toy on the carpet.
             Ball(env, "SqueakyToy", new Vector3(7.0f, 0.12f, 4.6f), Vector3.one * 0.22f, ProjectBootstrap.MatRed);
             NoiseZoneAt(new Vector3(7.0f, 0.3f, 4.6f), new Vector3(0.9f, 0.6f, 0.9f), NoiseSource.Object, 40f, 2f);

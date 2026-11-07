@@ -286,6 +286,24 @@ namespace SilentNight.Tests
             Debug.Log("[Smoke] door slam noise " + Get(door, "LastNoise"));
             Assert.GreaterOrEqual((float)Get(door, "LastNoise"), 60f, "slam is loud");
         }
+        [UnityTest]
+        public IEnumerator House_FallingRemoteTurnsTvOn()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1.5f);
+            Component tv = Find("SilentNight.Stealth.NoisyTV");
+            Component remote = Find("SilentNight.Stealth.TvRemote");
+            Assert.NotNull(tv, "TV in the living room");
+            Assert.NotNull(remote, "remote on the stand");
+            Assert.IsFalse((bool)Get(tv, "IsOn"), "TV starts off (remote did not fall on load)");
+            remote.GetType().GetMethod("Arm").Invoke(remote, null);
+            remote.GetType().GetMethod("NotifyImpact").Invoke(remote, new object[] { 2f });
+            yield return new WaitForSeconds(0.2f);
+            Assert.IsTrue((bool)Get(tv, "IsOn"), "remote hit turns the TV on");
+            Assert.Greater((int)Get(tv, "NoiseCount"), 0, "TV makes noise");
+            tv.GetType().GetMethod("TurnOff").Invoke(tv, null);
+            Assert.IsFalse((bool)Get(tv, "IsOn"), "elf can switch it off");
+        }
     }
 }
 #endif
