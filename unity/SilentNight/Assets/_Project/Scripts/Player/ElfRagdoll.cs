@@ -728,7 +728,7 @@ namespace SilentNight.Player
             float speed = _controller.PlanarSpeed;
             bool grounded = _controller.IsGrounded;
             bool crouch = _controller.IsCrouching;
-            bool carrying = _carry != null && (_carry.IsHoldingSomething);
+            bool carrying = _carry != null && (_carry.IsHoldingSomething || _carry.IsCoCarrying);
 
             _phase += speed * strideRadPerMeter * dt;
             float amp = Mathf.Lerp(0.08f, 0.95f, Mathf.Clamp01(speed / _controller.SprintSpeed));

@@ -82,6 +82,64 @@ namespace SilentNight.Tests
             Assert.IsFalse((bool)ragT.GetProperty("IsLimp").GetValue(victim), "helped up well before the 4 s downed time");
             UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
         }
+        [UnityTest]
+        public IEnumerator Hub_TwoElvesCarryTheBikeTogether()
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/Hub.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(0.5f);
+            var pad = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>();
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            joinT.GetMethod("Join").Invoke(UnityEngine.Object.FindAnyObjectByType(joinT), new object[] { pad });
+            yield return new WaitForSeconds(1f);
+
+            Type carryT = Type.GetType("SilentNight.Player.ElfCarry, Assembly-CSharp", true);
+            Type inputT = Type.GetType("SilentNight.Player.ElfInput, Assembly-CSharp", true);
+            Type ctrlT = Type.GetType("SilentNight.Player.ElfController, Assembly-CSharp", true);
+            Component p1 = null, p2 = null;
+            foreach (var c in UnityEngine.Object.FindObjectsByType(carryT, FindObjectsSortMode.None))
+            {
+                var comp = (Component)c;
+                int idx = (int)inputT.GetProperty("PlayerIndex").GetValue(comp.GetComponent(inputT));
+                if (idx == 0) p1 = comp; else p2 = comp;
+            }
+            Assert.NotNull(p1); Assert.NotNull(p2);
+
+            Type kindT = Type.GetType("SilentNight.Core.GiftKind, Assembly-CSharp", true);
+            var bike = (Component)Type.GetType("SilentNight.Gifts.GiftFactory, Assembly-CSharp", true).GetMethod("Create")
+                .Invoke(null, new object[] { Enum.Parse(kindT, "Huge"), p1.transform.position + p1.transform.forward, p1.transform.rotation });
+            yield return null;
+            Assert.IsTrue((bool)carryT.GetMethod("TryPickUp").Invoke(p1, new object[] { bike }), "p1 lifts the bike");
+            ctrlT.GetMethod("Teleport").Invoke(p2.GetComponent(ctrlT), new object[] { p1.transform.position + p1.transform.right * 1.6f, p1.transform.rotation, true });
+            yield return null;
+            yield return null;
+
+            var handle = carryT.GetProperty("CoCarryHandle").GetValue(p1);
+            var interactor = p2.GetComponent(Type.GetType("SilentNight.Player.ElfInteractor, Assembly-CSharp", true));
+            Assert.IsTrue((bool)handle.GetType().GetMethod("CanInteract").Invoke(handle, new object[] { interactor }), "p2 can grab the other end");
+            handle.GetType().GetMethod("Interact").Invoke(handle, new object[] { interactor });
+            yield return null;
+            Assert.IsTrue((bool)carryT.GetProperty("IsCoCarrying").GetValue(p1), "p1 co-carrying");
+            Assert.IsTrue((bool)carryT.GetProperty("IsCoCarrying").GetValue(p2), "p2 co-carrying");
+            Assert.Greater((float)carryT.GetProperty("SpeedMultiplier").GetValue(p1), 0.8f, "faster together");
+
+            Vector3 p2Start = p2.transform.position;
+            inputT.GetField("DebugMoveOverride").SetValue(null, new Vector2(1f, 0f));
+            yield return new WaitForSeconds(2f);
+            inputT.GetField("DebugMoveOverride").SetValue(null, null);
+            float drag = Vector3.Distance(p2Start, p2.transform.position);
+            Debug.Log("[Smoke] helper dragged " + drag.ToString("0.00") + " m");
+            Type ccT = Type.GetType("SilentNight.Player.CoCarry, Assembly-CSharp", true);
+            object active = ccT.GetProperty("Active").GetValue(null);
+            Assert.NotNull(active, "still carrying together after walking");
+            Assert.Greater(drag, 0.5f, "the second elf is pulled along by the bike");
+
+            handle.GetType().GetMethod("Interact").Invoke(handle, new object[] { interactor });
+            yield return null;
+            Assert.IsFalse((bool)carryT.GetProperty("IsCoCarrying").GetValue(p1), "released");
+            Assert.IsTrue((bool)carryT.GetProperty("IsCarryingHuge").GetValue(p1), "front elf keeps the bike");
+            UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
+        }
     }
 }
 #endif

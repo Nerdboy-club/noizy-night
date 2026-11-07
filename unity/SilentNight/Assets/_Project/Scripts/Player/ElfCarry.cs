@@ -34,18 +34,36 @@ namespace SilentNight.Player
         [SerializeField] private float hugeMaxMultiplier = 0.85f;
         [SerializeField] private float noisyBaseMultiplier = 0.92f;
         [SerializeField] private float noisyGripBonusPerLevel = 0.06f;
+        [Tooltip("Hands multiplier for BOTH elves while two of them carry the bike together (CoCarry). Solo is ~0.42.")]
+        [SerializeField] private float coCarryMultiplier = 0.85f;
 
         [Tooltip("Used when there is no PlayerProfile (scene started without Boot).")]
         [SerializeField] private int fallbackSackCapacity = 1;
 
         private readonly List<ICarryable> _sack = new List<ICarryable>(8);
         private ElfController _controller;
+        private CoCarry _coCarry;
+        private ElfCoCarryHandle _coCarryHandle;
 
         /// <summary>Raised whenever hands/sack contents change.</summary>
         public event Action Changed;
 
         public Transform HoldPoint => holdPoint;
         public Transform SackAnchor => sackAnchor;
+        /// <summary>Where a Huge gift sits relative to the elf root (y = hold height). Used by CoCarry.</summary>
+        public Vector3 HugeHoldLocalPosition => hugeHoldLocalPosition;
+
+        // ---------------- co-op carry (two elves, one bike) ----------------
+        /// <summary>The two-elf carry this elf takes part in (as holder/front or helper/rear), or null.</summary>
+        public CoCarry ActiveCoCarry => _coCarry != null && _coCarry.IsActive ? _coCarry : null;
+        /// <summary>True while this elf carries a Huge gift together with another elf (either end).</summary>
+        public bool IsCoCarrying => ActiveCoCarry != null;
+        /// <summary>Co-carrying and this elf owns the bike (front end; Held is the bike).</summary>
+        public bool IsCoCarryHolder => IsCoCarrying && _coCarry.Holder == this;
+        /// <summary>Co-carrying and this elf holds the other end (rear; its own hands report empty).</summary>
+        public bool IsCoCarryHelper => IsCoCarrying && _coCarry.Helper == this;
+        /// <summary>The "grab the other end" interactable child of this elf (created in Start if missing).</summary>
+        public ElfCoCarryHandle CoCarryHandle => _coCarryHandle;
 
         // ---------------- ICarrier ----------------
         public ICarryable Held { get; private set; }
@@ -73,7 +91,13 @@ namespace SilentNight.Player
             {
                 float sack = Mathf.Max(sackPenaltyMin, 1f - _sack.Count * sackPenaltyPerItem);
                 float hands = 1f;
-                if (IsHoldingSomething)
+                if (IsCoCarrying)
+                {
+                    // Sharing the weight: both ends move at the better co-op pace (grip upgrades can still beat it).
+                    float solo = Mathf.Min(hugeMaxMultiplier, hugeBaseMultiplier + GripLevel * hugeGripBonusPerLevel);
+                    hands = Mathf.Max(coCarryMultiplier, solo);
+                }
+                else if (IsHoldingSomething)
                 {
                     int grip = GripLevel;
                     switch (Held.Kind)
@@ -143,6 +167,41 @@ namespace SilentNight.Player
             EnsureAnchors();
         }
 
+        private void Start()
+        {
+            // Scenes baked before the co-carry feature have no handle child yet.
+            if (_coCarryHandle == null) _coCarryHandle = ElfCoCarryHandle.Ensure(this);
+        }
+
+        /// <summary>No hierarchy changes here (not allowed while deactivating): the bike is re-attached lazily in Update.</summary>
+        private void OnDisable()
+        {
+            if (_coCarry != null) _coCarry.Abort();
+        }
+
+        internal void SetCoCarry(CoCarry c)
+        {
+            _coCarry = c;
+            Changed?.Invoke();
+        }
+
+        internal void ClearCoCarry(CoCarry c)
+        {
+            if (_coCarry != c) return;
+            _coCarry = null;
+            Changed?.Invoke();
+        }
+
+        internal void SetCoCarryHandle(ElfCoCarryHandle h) => _coCarryHandle = h;
+
+        /// <summary>Put the held item back on the hold point (after a co-carry ends and this elf keeps the bike).</summary>
+        internal void ReattachHeld()
+        {
+            if (!IsHoldingSomething) return;
+            PlaceHoldPointFor(Held);
+            Held.OnPickedUp(holdPoint);
+        }
+
         private void EnsureAnchors()
         {
             ElfVisual visual = GetComponent<ElfVisual>();
@@ -172,6 +231,12 @@ namespace SilentNight.Player
                 Held = null;
                 Changed?.Invoke();
             }
+            // A co-carry that was aborted (partner left, component disabled) leaves the bike unparented: take it back.
+            if (!IsCoCarrying && IsCarryingHuge && Held.GameObject.transform.parent == null)
+            {
+                Gift g = Held as Gift;
+                if (g == null || g.IsHeld) ReattachHeld();
+            }
             for (int i = _sack.Count - 1; i >= 0; i--)
             {
                 if (!PlayerGate.IsAlive(_sack[i]))
@@ -197,6 +262,7 @@ namespace SilentNight.Player
         {
             if (!PlayerGate.IsAlive(item)) return false;
             if (IsHoldingSomething) return false;
+            if (IsCoCarryHelper) return false; // hands are busy with the other end of the bike
             if (SackContains(item)) return false;
 
             PlaceHoldPointFor(item);
@@ -208,6 +274,12 @@ namespace SilentNight.Player
 
         public void Drop()
         {
+            if (IsCoCarrying)
+            {
+                // Helper: just let go of its end (the front elf keeps the bike). Holder: end the co-carry, then drop.
+                if (IsCoCarryHelper) { _coCarry.End(true); return; }
+                _coCarry.End(false);
+            }
             if (!IsHoldingSomething) { Held = null; return; }
             ICarryable item = Held;
             Held = null;
@@ -236,6 +308,7 @@ namespace SilentNight.Player
         public bool TryTakeFromSack()
         {
             if (IsHoldingSomething) return false;
+            if (IsCoCarryHelper) return false;
             if (_sack.Count == 0) return false;
 
             int last = _sack.Count - 1;
@@ -252,6 +325,8 @@ namespace SilentNight.Player
 
         public ICarryable[] TakeAll()
         {
+            // Delivering the bike (sleigh / tree) ends the co-carry; the caller takes the bike over.
+            if (IsCoCarryHolder) _coCarry.End(false);
             int count = (IsHoldingSomething ? 1 : 0);
             for (int i = 0; i < _sack.Count; i++) if (PlayerGate.IsAlive(_sack[i])) count++;
 

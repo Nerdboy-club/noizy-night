@@ -357,7 +357,9 @@ namespace SilentNight.Player
             UpdateCapsuleHeight(dt);
 
             // ---- sprint & stamina ----
-            _sprinting = canControl && wantsMove && _input.SprintHeld && !_crouching && !_exhausted && _stamina > 0f;
+            bool coCarrying = _carry != null && _carry.IsCoCarrying;
+            _sprinting = canControl && wantsMove && _input.SprintHeld && !_crouching && !_exhausted && _stamina > 0f
+                         && !coCarrying; // no sprinting with a shared bike
             UpdateStamina(dt);
 
             // ---- desired planar velocity ----
@@ -397,7 +399,7 @@ namespace SilentNight.Player
             // ---- ledge grab (airborne / just jumped, pushing toward a wall with a reachable top) ----
             if (ledgeGrabEnabled && canControl && wantsMove && !_grounded && !_crouching
                 && _mantleCooldownTimer <= 0f && _verticalVelocity > -ledgeMaxFallSpeed
-                && !(_carry != null && _carry.IsCarryingHuge)
+                && !(_carry != null && (_carry.IsCarryingHuge || coCarrying))
                 && TryFindLedge(new Vector3(wishDir.x, 0f, wishDir.z).normalized, out Vector3 ledgeStand, out Vector3 ledgeDir))
             {
                 BeginMantle(ledgeStand, ledgeDir);
@@ -440,7 +442,8 @@ namespace SilentNight.Player
             Vector3 preMovePos = transform.position;
             if (_hugeScrapeTimer > 0f) _hugeScrapeTimer -= dt;
             if (_hugeToastTimer > 0f) _hugeToastTimer -= dt;
-            if (_carry != null && _carry.IsCarryingHuge && SnapshotHugeBox())
+            // Not while two elves share the bike: CoCarry owns its pose then (TODO: clearance for the shared bike).
+            if (_carry != null && _carry.IsCarryingHuge && !coCarrying && SnapshotHugeBox())
             {
                 hugeActive = true;
                 hugeWedged = HugeBoxOverlaps(preMovePos, currentRot);
@@ -786,7 +789,7 @@ namespace SilentNight.Player
                 _stamina -= sprintDrainPerSecond * dt;
                 draining = true;
             }
-            bool heavyStrain = _carry != null && _carry.IsCarryingHuge
+            bool heavyStrain = _carry != null && _carry.IsCarryingHuge && !_carry.IsCoCarrying // shared weight: no strain
                                && (GameServices.Profile == null || GameServices.Profile.GripLevel < 2);
             if (heavyStrain)
             {

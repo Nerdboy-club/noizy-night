@@ -50,7 +50,7 @@ namespace SilentNight.Player
             var visual = go.AddComponent<ElfVisual>();
             visual.ThemeIndex = themeIndex;
             visual.EnsureAnchors();
-            go.AddComponent<ElfCarry>();
+            var carry = go.AddComponent<ElfCarry>();
             go.AddComponent<ElfInteractor>();
             var controller = go.AddComponent<ElfController>();
             if (!primary) DisableSpawnSnap(controller);
@@ -66,6 +66,8 @@ namespace SilentNight.Player
             SetLayerRecursive(go.transform, go.layer);
             // After the layer pass: ElfHelpUp builds its own trigger child on the Interactable layer (in Start).
             go.AddComponent<ElfHelpUp>(); // co-op: a friend can help this elf up when it is downed
+            // Co-op: a friend can grab the other end of this elf's bike (trigger child on the Interactable layer).
+            ElfCoCarryHandle.Ensure(carry);
             return go;
         }
 
