@@ -117,6 +117,13 @@ namespace SilentNight.Stealth
             "Ну всё, звоню Санте! Пусть забирает своих бандитов!"
         };
 
+        private static readonly string[] ThrowOutGrumbles =
+        {
+            "бу-бу-бу… спать!",
+            "и не возвращайся!",
+            "развелось ушастых…"
+        };
+
         private const string GiveUpToast = "Показалось… Спать, спать.";
         private const string GiveUpWord = "показалось…";
 
@@ -126,6 +133,9 @@ namespace SilentNight.Stealth
         public float Detection01 => Mathf.Clamp01(_detect);
         /// <summary>World position of his head (follows the lying / sitting / standing pose). Used by the alert indicator.</summary>
         public Vector3 IndicatorAnchor => HeadPosition;
+        /// <summary>Co-op: how many times an elf was caught and thrown back into the fireplace instead of a game over.</summary>
+        public int ElvesThrownOut { get; private set; }
+        private bool _suppressLevelToast;
 
         private GrandpaAlertIndicator _indicator;
         private GrandpaSnore _snore;
@@ -673,6 +683,9 @@ namespace SilentNight.Stealth
 
         private void Catch(Vector3 playerPos)
         {
+            // Co-op: a caught elf is thrown back into the fireplace instead of ending the run (solo unchanged).
+            if (TryThrowOut(playerPos)) return;
+
             _phase = Phase.Caught;
             _mover.Stop();
             _mover.FaceTowards(playerPos, 1f, 100f); // snap to face the elf
@@ -685,6 +698,85 @@ namespace SilentNight.Stealth
 
             SetLevel(AlertLevel.Chasing);
             GameEvents.RaisePlayerCaught("Дед тебя поймал!");
+        }
+
+        /// <summary>
+        /// Co-op only (more than one valid registered elf): grabs the elf nearest to the catch point, throws it back
+        /// to the PlayerSpawn (fireplace) limp in a soot puff, then grumbles and walks back to bed. Returns false
+        /// (caller keeps the normal PlayerCaught / game-over path) when solo, when this is the last elf, or when the
+        /// caught elf cannot be resolved.
+        /// </summary>
+        private bool TryThrowOut(Vector3 catchPos)
+        {
+            if (_phase == Phase.Caught || _caughtRaised) return false;
+            var players = GameServices.Players;
+            if (players.Count <= 1 || CountValidPlayers() <= 1) return false;
+            if (!StealthUtil.TryGetNearestPlayer(catchPos, out IPlayerStatus caught, out Transform elf, out _)) return false;
+
+            int index = -1;
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (ReferenceEquals(players[i], caught)) { index = i; break; }
+            }
+            if (index < 0) return false; // not a registered player (legacy fallback): treat like solo
+
+            // Fireplace spawn (same lookup as ElfController / FallRespawn).
+            GameObject spawn = null;
+            try { spawn = GameObject.FindWithTag(GameConstants.TagSpawn); } catch (UnityException) { }
+            Vector3 spawnPos = spawn != null ? spawn.transform.position : Vector3.up;
+            Quaternion spawnRot = spawn != null ? spawn.transform.rotation : Quaternion.identity;
+            Vector2 jitter = Random.insideUnitCircle * 0.4f;
+            Vector3 landPos = spawnPos + new Vector3(jitter.x, 0f, jitter.y);
+
+            var controller = elf.GetComponent<SilentNight.Player.ElfController>();
+            if (controller != null) controller.Teleport(landPos, spawnRot, true);
+            else elf.SetPositionAndRotation(landPos, spawnRot);
+
+            var ragdoll = elf.GetComponent<SilentNight.Player.ElfRagdoll>();
+            if (ragdoll != null) ragdoll.GoLimp();
+
+            SilentNight.FX.SootPuff.Spawn(spawnPos + Vector3.up * 0.3f, 0.8f);
+            ElvesThrownOut++;
+
+            // Grandpa: stop the chase, grumble, go back to bed through the normal return path.
+            _mover.Stop();
+            if (OutOfBed) _mover.FaceTowards(catchPos, 1f, 100f);
+            _detect = 0f;
+            _timeSinceSeen = 999f;
+            _pendingInvestigate = false;
+            _quietWake = false;
+            _grumbledThisTrip = true; // no extra "Показалось…" toast on the way back
+            _awareness = Mathf.Min(_awareness, searchThreshold - 1f);
+
+            switch (_phase)
+            {
+                case Phase.InBed:
+                case Phase.LyingDown:
+                    break; // already (going) to bed
+                case Phase.GettingUp:
+                    BeginLyingDown();
+                    break;
+                default:
+                    StartReturn();
+                    break;
+            }
+
+            // Update the alert level silently so the throw-out toast isn't replaced by "Дед потерял тебя из виду...".
+            _suppressLevelToast = true;
+            SetLevel(ComputeLevel());
+            _suppressLevelToast = false;
+
+            GameEvents.RaiseToast("Дед схватил эльфа " + (index + 1) + " за шиворот и выкинул обратно в камин!");
+            if (_indicator != null) _indicator.ShowWord(ThrowOutGrumbles[Random.Range(0, ThrowOutGrumbles.Length)], 3f);
+            return true;
+        }
+
+        private static int CountValidPlayers()
+        {
+            int n = 0;
+            for (int i = 0; i < StealthUtil.PlayerCount; i++)
+                if (StealthUtil.TryGetPlayerAt(i, out _, out _, out _)) n++;
+            return n;
         }
 
         // ---------------- helpers ----------------
@@ -710,7 +802,7 @@ namespace SilentNight.Stealth
             _level = next;
             _levelBroadcast = true;
             GameEvents.RaiseGrandpaAlertChanged(next);
-            if (first || prev == next) return;
+            if (first || prev == next || _suppressLevelToast) return;
 
             switch (next)
             {

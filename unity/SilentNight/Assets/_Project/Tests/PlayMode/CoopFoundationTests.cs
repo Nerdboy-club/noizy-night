@@ -195,6 +195,44 @@ namespace SilentNight.Tests
             Assert.Less(p1.transform.position.z, -3.4f, "the front elf cannot just walk away along the wall");
             UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
         }
+        [UnityTest]
+        public IEnumerator House_CaughtElfIsThrownOutInCoop()
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/House.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(1f);
+            var pad = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>();
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            joinT.GetMethod("Join").Invoke(UnityEngine.Object.FindAnyObjectByType(joinT), new object[] { pad });
+            yield return new WaitForSeconds(1f);
+
+            Type inputT = Type.GetType("SilentNight.Player.ElfInput, Assembly-CSharp", true);
+            Component p2 = null;
+            foreach (var c in UnityEngine.Object.FindObjectsByType(inputT, FindObjectsSortMode.None))
+                if ((int)inputT.GetProperty("PlayerIndex").GetValue(c) == 1) p2 = (Component)c;
+            Assert.NotNull(p2, "second elf");
+
+            bool caught = false;
+            Type evT = Type.GetType("SilentNight.Core.GameEvents, Assembly-CSharp", true);
+            var ev = evT.GetEvent("PlayerCaught");
+            Action<string> h = _ => caught = true;
+            ev.AddEventHandler(null, h);
+            try
+            {
+                Type gT = Type.GetType("SilentNight.Stealth.Grandpa, Assembly-CSharp", true);
+                var grandpa = UnityEngine.Object.FindAnyObjectByType(gT);
+                gT.GetMethod("Catch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Invoke(grandpa, new object[] { p2.transform.position });
+                yield return null;
+                yield return null;
+                Assert.IsFalse(caught, "run does not end while another elf is still in the house");
+                Assert.AreEqual(1, (int)gT.GetProperty("ElvesThrownOut").GetValue(grandpa), "one elf thrown out");
+                Type ragT = Type.GetType("SilentNight.Player.ElfRagdoll, Assembly-CSharp", true);
+                Assert.IsTrue((bool)ragT.GetProperty("IsLimp").GetValue(p2.GetComponent(ragT)), "thrown elf lands in a heap");
+            }
+            finally { ev.RemoveEventHandler(null, h); }
+            UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
+        }
     }
 }
 #endif
