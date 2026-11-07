@@ -43,6 +43,11 @@ namespace SilentNight.UI
         private VisualElement _prompt;
         private Label _promptText;
         private VisualElement _hint;
+        private VisualElement _hands;
+        private Label _handsTitle;
+        private Label _handsHint;
+        private VisualElement _catnip;
+        private Label _catnipText;
 
         // cached state (to avoid per-frame allocations / restyles)
         private float _noiseShown;
@@ -59,6 +64,9 @@ namespace SilentNight.UI
         private float _pulseTimer;
         private bool _pulseOn;
         private float _damageToastCooldown;
+        private ICarryable _heldShown;
+        private int _heldStateShown = int.MinValue;
+        private int _catnipShown = -1;
 
         protected override VisualElement CreateRoot()
         {
@@ -101,6 +109,18 @@ namespace SilentNight.UI
             var bars = UIFactory.Ignored("sn-bars", _gaugeWrap);
             _staminaFill = MakeBar(bars, "sn-bar__fill--stamina", "СИЛЫ", out _);
             _fuelFill = MakeBar(bars, "sn-bar__fill--fuel", "РАНЕЦ", out _fuelRow);
+
+            // ---- above the gauge: catnip counter + "in hands" status (column grows upward)
+            var status = UIFactory.Ignored("sn-hands-col");
+            _gaugeWrap.Insert(0, status);
+            _catnip = UIFactory.Ignored("sn-catnip", status);
+            UIFactory.Key("F", _catnip);
+            _catnipText = UIFactory.Text("Мята: 0", "sn-catnip__text", _catnip);
+            _catnip.style.display = DisplayStyle.None;
+            _hands = UIFactory.Ignored("sn-hands", status);
+            _handsTitle = UIFactory.Text("", "sn-hands__title", _hands);
+            _handsHint = UIFactory.Text("", "sn-hands__hint", _hands);
+            _hands.style.display = DisplayStyle.None;
 
             // ---- bottom-right: sack slots
             _sackWrap = UIFactory.Ignored("sn-sack", root);
@@ -193,6 +213,12 @@ namespace SilentNight.UI
             for (int i = 0; i < ToastPool; i++) { _toastLeft[i] = 0f; _toastLabels[i].style.display = DisplayStyle.None; }
             _promptShown = null;
             _prompt.style.display = DisplayStyle.None;
+
+            _heldShown = null;
+            _heldStateShown = int.MinValue;
+            _hands.style.display = DisplayStyle.None;
+            _catnipShown = -1;
+            _catnip.style.display = DisplayStyle.None;
         }
 
         public void SetPromptSuppressed(bool suppressed)
@@ -375,6 +401,9 @@ namespace SilentNight.UI
                 }
             }
 
+            RefreshHands(carrier);
+            RefreshCatnip(profile);
+
             // interaction prompt
             string prompt = null;
             if (!_promptSuppressed)
@@ -395,6 +424,83 @@ namespace SilentNight.UI
                     _prompt.style.display = DisplayStyle.Flex;
                 }
             }
+        }
+
+        /// <summary>"In hands" line: gift name + kind-specific hint. Strings rebuilt only when the shown state changes.</summary>
+        private void RefreshHands(ICarrier carrier)
+        {
+            ICarryable held = carrier != null ? carrier.Held : null;
+            if (held is Object ho && ho == null) held = null;
+
+            var gift = held as SilentNight.Gifts.Gift;
+            int state = 0;
+            if (held != null)
+            {
+                int sub = 0;
+                if (held.Kind == GiftKind.Noisy && gift != null)
+                    sub = Mathf.Clamp(Mathf.CeilToInt(gift.WindLeft), 0, 999);
+                else if (held.Kind == GiftKind.Fragile && gift != null && gift.IsBroken)
+                    sub = 1;
+                state = (int)held.Kind * 1000 + sub;
+            }
+
+            if (ReferenceEquals(held, _heldShown) && state == _heldStateShown) return;
+            bool sameItem = ReferenceEquals(held, _heldShown);
+            _heldShown = held;
+            _heldStateShown = state;
+
+            if (held == null)
+            {
+                _hands.style.display = DisplayStyle.None;
+                return;
+            }
+
+            if (!sameItem)
+                _handsTitle.text = gift != null ? gift.Label : SilentNight.Gifts.Gift.LabelFor(held.Kind);
+
+            bool danger = false;
+            switch (held.Kind)
+            {
+                case GiftKind.Small:
+                    _handsHint.text = "можно убрать в мешок [R]";
+                    break;
+                case GiftKind.Noisy:
+                    int sec = state % 1000;
+                    danger = sec < 8;
+                    _handsHint.text = $"звон через {sec} с — возьмите в руки, чтобы подкрутить";
+                    break;
+                case GiftKind.Fragile:
+                    bool broken = state % 1000 == 1;
+                    danger = broken;
+                    _handsHint.text = broken ? "разбит" : "хрупкое! не бегите и не падайте";
+                    break;
+                case GiftKind.RcCar:
+                    _handsHint.text = "положите на пол [E] — уедет шуметь";
+                    break;
+                case GiftKind.Huge:
+                    _handsHint.text = "несите боком через двери";
+                    break;
+                default:
+                    _handsHint.text = string.Empty;
+                    break;
+            }
+            _handsHint.EnableInClassList("sn-hands__hint--danger", danger);
+            _hands.style.display = DisplayStyle.Flex;
+        }
+
+        /// <summary>Catnip counter: Delivery only, shown when the player owns at least one pouch.</summary>
+        private void RefreshCatnip(PlayerProfile profile)
+        {
+            int n = _mode == GameState.Delivery && profile != null ? profile.CatnipPouches : 0;
+            if (n == _catnipShown) return;
+            _catnipShown = n;
+            if (n <= 0)
+            {
+                _catnip.style.display = DisplayStyle.None;
+                return;
+            }
+            _catnipText.text = $"Мята: {n}";
+            _catnip.style.display = DisplayStyle.Flex;
         }
     }
 }

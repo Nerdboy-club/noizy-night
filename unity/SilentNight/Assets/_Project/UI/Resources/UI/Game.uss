@@ -379,6 +379,68 @@ Label {
     background-color: rgba(255, 255, 255, 0.28);
 }
 
+/* catnip counter + "in hands" status — above the noise gauge */
+.sn-hands-col {
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.sn-catnip {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 4px 16px 6px 6px;
+    background-color: rgba(46, 154, 69, 0.92);
+    border-width: 3px;
+    border-bottom-width: 6px;
+    border-color: rgb(42, 20, 10);
+    border-radius: 22px;
+}
+.sn-catnip .sn-key {
+    min-width: 32px;
+    height: 32px;
+    font-size: 18px;
+    border-bottom-width: 5px;
+    border-radius: 8px;
+    padding: 0px 6px 0px 6px;
+}
+.sn-catnip__text {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(255, 243, 214);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 2px 0px rgba(42, 20, 10, 0.9);
+}
+.sn-hands {
+    max-width: 520px;
+    padding: 8px 18px 10px 16px;
+    background-color: rgba(59, 35, 20, 0.88);
+    border-width: 3px;
+    border-bottom-width: 6px;
+    border-color: rgb(42, 20, 10);
+    border-left-color: rgb(242, 182, 48);
+    border-left-width: 8px;
+    border-radius: 14px;
+}
+.sn-hud--spooky .sn-hands { background-color: rgba(58, 30, 82, 0.9); border-left-color: rgb(176, 124, 255); }
+.sn-hands__title {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(242, 182, 48);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+}
+.sn-hands__hint {
+    margin-top: 2px;
+    font-size: 18px;
+    white-space: normal;
+    color: rgb(255, 243, 214);
+}
+.sn-hands__hint--danger {
+    color: rgb(255, 96, 80);
+    -unity-font-style: bold;
+}
+
 /* sack — bottom-right */
 .sn-sack {
     position: absolute;
