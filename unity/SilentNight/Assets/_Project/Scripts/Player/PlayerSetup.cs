@@ -69,6 +69,8 @@ namespace SilentNight.Player
             go.AddComponent<ElfHelpUp>(); // co-op: a friend can help this elf up when it is downed
             // Co-op: a friend can grab the other end of this elf's bike (trigger child on the Interactable layer).
             ElfCoCarryHandle.Ensure(carry);
+            // Co-op: "Эльф N" label above the head (separate root object, built in Start; hidden in solo).
+            ElfNameTag.Ensure(go);
             return go;
         }
 
