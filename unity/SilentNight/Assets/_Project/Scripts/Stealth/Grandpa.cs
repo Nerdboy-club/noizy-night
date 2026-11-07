@@ -69,9 +69,12 @@ namespace SilentNight.Stealth
         [SerializeField] private float lieDownTime = 1.2f;
 
         [Header("Searching")]
-        [SerializeField] private float lookAroundTime = 4.5f;
-        [SerializeField] private float lookSweepAngle = 75f;
-        [SerializeField] private float lookSweepSpeed = 1.4f;
+        [Tooltip("Seconds of the visible look-around at the noise spot before he gives up.")]
+        [SerializeField] private float lookAroundDuration = 3f;
+        [Tooltip("Yaw swing (deg) to each side during the look-around.")]
+        [SerializeField] private float lookAroundAngle = 70f;
+        [Tooltip("Left+right sweeps during the look-around.")]
+        [SerializeField, Min(1)] private int lookAroundSweeps = 2;
         [SerializeField] private float searchTimeout = 20f;
         [SerializeField] private float returnTimeout = 25f;
 
@@ -94,6 +97,10 @@ namespace SilentNight.Stealth
         [Header("Readability")]
         [Tooltip("World-space Zzz / ? / ! marker above his head plus a short word for what he heard.")]
         [SerializeField] private bool showAlertIndicator = true;
+        [Tooltip("Looping 3D snore while he sleeps (procedural clip).")]
+        [SerializeField] private bool snoreAudio = true;
+        [SerializeField, Range(0f, 1f)] private float snoreVolume = 0.6f;
+        [SerializeField] private float snoreMaxDistance = 10f;
 
         [Header("Debug")]
         [SerializeField] private bool drawGizmos = true;
@@ -108,6 +115,9 @@ namespace SilentNight.Stealth
             "Ну всё, звоню Санте! Пусть забирает своих бандитов!"
         };
 
+        private const string GiveUpToast = "Показалось… Спать, спать.";
+        private const string GiveUpWord = "показалось…";
+
         // ---------------- public read-only ----------------
         public AlertLevel Level => _level;
         public float Awareness => _awareness;
@@ -116,6 +126,8 @@ namespace SilentNight.Stealth
         public Vector3 IndicatorAnchor => HeadPosition;
 
         private GrandpaAlertIndicator _indicator;
+        private GrandpaSnore _snore;
+        private bool _grumbledThisTrip;
 
         // ---------------- state ----------------
         private NavMover _mover;
@@ -251,6 +263,7 @@ namespace SilentNight.Stealth
             if (visual != null) visual.SnapPose();
             SetLevel(AlertLevel.Asleep);
             if (showAlertIndicator && _indicator == null) _indicator = GrandpaAlertIndicator.Create(this);
+            if (snoreAudio && _snore == null) _snore = GrandpaSnore.Create(transform, snoreVolume, snoreMaxDistance);
         }
 
         // ---------------- hearing ----------------
@@ -286,7 +299,12 @@ namespace SilentNight.Stealth
         private void Update()
         {
             if (!_initialized) return;
-            if (!StealthUtil.IsGameplayActive) { _mover.Halt(); return; }
+            if (!StealthUtil.IsGameplayActive)
+            {
+                _mover.Halt();
+                if (_snore != null) _snore.Tick(0f, false, false, true, HeadPosition);
+                return;
+            }
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
@@ -326,6 +344,12 @@ namespace SilentNight.Stealth
             UpdateFlashlight(dt);
             UpdateVisual();
             SetLevel(ComputeLevel());
+
+            if (_snore != null)
+            {
+                bool snoring = _phase == Phase.InBed && _bedLevel <= AlertLevel.Stirring;
+                _snore.Tick(dt, snoring, _bedLevel == AlertLevel.Stirring, false, HeadPosition);
+            }
         }
 
         private void UpdateEyes()
@@ -417,6 +441,7 @@ namespace SilentNight.Stealth
             _transitionFrom = transform.position;
             _transitionFromRot = transform.rotation;
             _searchTimer = 0f;
+            _grumbledThisTrip = false;
             if (bodyCollider != null) bodyCollider.enabled = true;
         }
 
@@ -457,7 +482,7 @@ namespace SilentNight.Stealth
         {
             _searchTimer += dt;
             if (_mover.Tick(dt)) { StartLookAround(); return; }
-            if (_searchTimer > searchTimeout) StartReturn();
+            if (_searchTimer > searchTimeout) GiveUpSearch();
         }
 
         private void StartLookAround()
@@ -468,12 +493,33 @@ namespace SilentNight.Stealth
             _lookBaseYaw = transform.eulerAngles.y;
         }
 
+        /// <summary>
+        /// Readable look-around at the noise spot: swings left then right (lookAroundSweeps times, ±lookAroundAngle)
+        /// over lookAroundDuration and ends facing the original direction. The vision cone follows (eyes = body yaw),
+        /// so it visibly sweeps the room. Always plays to the end unless a new noise or a sighting interrupts it.
+        /// </summary>
         private void TickLookingAround(float dt)
         {
             _searchTimer += dt;
-            float yaw = _lookBaseYaw + Mathf.Sin(_phaseTimer * lookSweepSpeed) * lookSweepAngle;
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.Euler(0f, yaw, 0f), turnSpeed * dt);
-            if (_phaseTimer >= lookAroundTime || _searchTimer > searchTimeout) StartReturn();
+            float dur = Mathf.Max(0.5f, lookAroundDuration);
+            float u = Mathf.Clamp01(_phaseTimer / dur);
+            // Negative yaw = turn left first; whole sine cycles so he ends where he started.
+            float offset = -Mathf.Sin(u * Mathf.PI * 2f * Mathf.Max(1, lookAroundSweeps)) * lookAroundAngle;
+            Quaternion look = Quaternion.Euler(0f, _lookBaseYaw + offset, 0f);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, look, turnSpeed * 2f * dt);
+            if (_phaseTimer >= dur) GiveUpSearch();
+        }
+
+        /// <summary>Nothing found: grumble once per trip out of bed, then use the normal return-to-bed path.</summary>
+        private void GiveUpSearch()
+        {
+            if (!_grumbledThisTrip)
+            {
+                _grumbledThisTrip = true;
+                GameEvents.RaiseToast(GiveUpToast);
+                if (_indicator != null) _indicator.ShowWord(GiveUpWord, 2.5f);
+            }
+            StartReturn();
         }
 
         private void StartPatrol()
