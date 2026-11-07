@@ -1,5 +1,23 @@
 # Operation: Silent Night: план перехода на кооператив (1–4 игрока)
 
+> ## Статус на 2026-11-07 (ветка `claude/overnight-dev`)
+>
+> | Шаг | Что | Статус |
+> |---|---|---|
+> | 0 | Реестр игроков `GameServices.Players`, `StealthUtil` | ГОТОВО (ит. 7) |
+> | 1 | Локальный join (Start/A на геймпаде), камера на всех, отключение геймпада | ГОТОВО (ит. 11) |
+> | 6 | «Поднять друга» [E] | ГОТОВО (ит. 12) |
+> | 6 | Совместная переноска велосипеда (+ застревание в проёмах) | ГОТОВО (ит. 13, 14) |
+> | 6 | Столкновения эльфов («бонк») | ГОТОВО (ит. 16) |
+> | 3 | Состав команды переживает смену сцен | ГОТОВО (ит. 17) |
+> | 5 | Подписи-ники над эльфами («Эльф N», «Помогите! [E]») | ГОТОВО (ит. 20) |
+> | 4 | Поимка одного эльфа = выкинут в камин, проигрыш при поимке последнего | ГОТОВО (ит. 15) |
+> | 5 | Отдельный HUD для каждого игрока | TODO |
+> | 2 | Опция split-screen | TODO |
+> | 7+ | Сеть (Netcode, LAN, Steam) | TODO |
+>
+> Проверено только автотестами и компиляцией, не руками. Строки таблицы ниже с пометкой **РЕШЕНО** / **ЧАСТИЧНО** уже закрыты кодом, остальное актуально.
+
 Проект: `unity/SilentNight` (Unity **6000.6.8f1**, URP 17.6, Input System 1.20.1, Cinemachine 6.6.0, AI Navigation 2.0.16, Multiplayer Center 2.1.0 уже стоит).
 Всё ниже основано на чтении текущего кода. Код этим документом не менялся.
 
@@ -11,25 +29,25 @@
 
 | Файл | Член / место | Проблема |
 |---|---|---|
-| `Core/GameServices.cs` | `LocalPlayer`, `RegisterLocalPlayer`, `UnregisterLocalPlayer` | Один слот. Второй `ElfController.OnEnable` перезаписывает первого, а `OnDisable` любого из них обнуляет слот. Списка игроков нет. |
+| `Core/GameServices.cs` | `LocalPlayer`, `RegisterLocalPlayer`, `UnregisterLocalPlayer` | Один слот. Второй `ElfController.OnEnable` перезаписывает первого, а `OnDisable` любого из них обнуляет слот. Списка игроков нет. **[РЕШЕНО (ит. 7): `GameServices.Players`, `LocalPlayer` работает как раньше]** |
 | `Core/GameServices.cs` | `UIModalOpen` (bool) | Глобальный флаг: если один игрок открыл доску заказов, управление теряют все. |
 | `Core/Interfaces.cs` | `IPlayerStatus` | Нет `PlayerIndex`, `IsDowned`, владельца или клиента. `ICarrier` рассчитан на один предмет в руках одного эльфа. |
-| `Core/GameEvents.cs` | `PlayerCaught(string)` | Не говорит, *кого* поймали. Сразу ведёт к GameOver. |
-| `Core/GameFlow.cs` | `OnPlayerCaught` → `SetState(GameOver)`; `TogglePause` → `Time.timeScale = 0`; `LoadScene` → `SceneManager.LoadSceneAsync`; `SetState` → `Cursor.lockState` | Одна поимка заканчивает забег. Пауза останавливает время для всех (онлайн так нельзя). Сцены грузятся локально, без сети. |
+| `Core/GameEvents.cs` | `PlayerCaught(string)` | Не говорит, *кого* поймали. Сразу ведёт к GameOver. **[ЧАСТИЧНО (ит. 15): проигрыш только при поимке последнего эльфа]** |
+| `Core/GameFlow.cs` | `OnPlayerCaught` → `SetState(GameOver)`; `TogglePause` → `Time.timeScale = 0`; `LoadScene` → `SceneManager.LoadSceneAsync`; `SetState` → `Cursor.lockState` | Одна поимка заканчивает забег. Пауза останавливает время для всех (онлайн так нельзя). Сцены грузятся локально, без сети. **[ЧАСТИЧНО (ит. 15): `GameOver` только при поимке последнего]** |
 | `Core/GameServices.cs` | `ActiveOrder`, `AvailableOrders`, `LoadedGifts`, `Profile` | Статическое локальное состояние. В сети нужен один источник правды (хост). |
-| `Player/ElfInput.cs` | `CreateActions()`: биндинги `<Keyboard>`, `<Mouse>`, `<Gamepad>` без привязки к устройству; `static DebugMoveOverride` | Каждый эльф читает **все** устройства: геймпад двигает обоих. Static-override действует на всех. |
-| `Player/ElfController.cs` | `OnEnable/OnDisable` → `RegisterLocalPlayer`; `FindSpawn()` → `FindWithTag(TagSpawn)`; `GetCameraYaw()` → фолбэк на `Camera.main`; `handlePauseInput` | Один спавн на сцену, все появляются в одной точке. Камера берётся глобальная. |
-| `Player/ThirdPersonCameraRig.cs` | `EnsureBrain()` → `Camera.main` + один `CinemachineBrain`; `HandleInput` → `Mouse.current` | Все виртуальные камеры идут в одну реальную камеру. Нет каналов Cinemachine и viewport rect. |
+| `Player/ElfInput.cs` | `CreateActions()`: биндинги `<Keyboard>`, `<Mouse>`, `<Gamepad>` без привязки к устройству; `static DebugMoveOverride` | Каждый эльф читает **все** устройства: геймпад двигает обоих. Static-override действует на всех. **[РЕШЕНО (ит. 11): ввод по устройствам, join по Start/A на свободном геймпаде]** |
+| `Player/ElfController.cs` | `OnEnable/OnDisable` → `RegisterLocalPlayer`; `FindSpawn()` → `FindWithTag(TagSpawn)`; `GetCameraYaw()` → фолбэк на `Camera.main`; `handlePauseInput` | Один спавн на сцену, все появляются в одной точке. Камера берётся глобальная. **[РЕШЕНО (ит. 11, 17): друзья появляются рядом с первым игроком в каждой сцене]** |
+| `Player/ThirdPersonCameraRig.cs` | `EnsureBrain()` → `Camera.main` + один `CinemachineBrain`; `HandleInput` → `Mouse.current` | Все виртуальные камеры идут в одну реальную камеру. Нет каналов Cinemachine и viewport rect. **[ЧАСТИЧНО (ит. 11): камера первого игрока берёт в кадр всех; split-screen не сделан]** |
 | `Player/PlayerGate.cs` | `CanControl`, `CanMouseLook` (static) | Глобальное разрешение на управление, без разбивки по игрокам. Мышь всегда у всех. |
 | `Player/ElfRagdoll.cs` | `Update` → `Keyboard.current[ragdollDebugKey]`; `OnGUI` → `Rect(10,10,…)`; `BuildModel` → `AssetDatabase.LoadAssetAtPath` под `#if UNITY_EDITOR` | Клавиша G роняет всех эльфов. Отладочные надписи накладываются друг на друга. Эльф, созданный в рантайме **в билде**, остаётся без модели: AssetDatabase в билде недоступен. |
-| `Player/ElfCarry.cs` | `Held` (один), `IsCarryingHuge` и `SpeedMultiplier` (Huge = ×0.42 для одного эльфа) | Велосипед несёт один эльф. Совместного хвата нет. |
+| `Player/ElfCarry.cs` | `Held` (один), `IsCarryingHuge` и `SpeedMultiplier` (Huge = ×0.42 для одного эльфа) | Велосипед несёт один эльф. Совместного хвата нет. **[РЕШЕНО (ит. 13, 14): совместная переноска велосипеда [E], застревание в проёмах]** |
 | `Player/PlayerSetup.cs` | `CreatePlayer(pos, themeIndex)` | Нет индекса игрока и списка устройств. Темы 0..3 уже есть: это хорошо. |
 | `Player/FallRespawn.cs` | `FindWithTag(TagSpawn)` | Один спавн. |
 | `Gifts/Gift.cs` | `OnPickedUp` → `transform.SetParent(holdPoint)`; `OnCollisionEnter` (урон и шум локально); `Update` → `Destroy` ниже `killY` | В NGO `NetworkObject` нельзя сделать дочерним к Transform без `NetworkObject`, а `HoldPoint` его не имеет. Урон, шум и уничтожение должны считаться только на хосте. |
 | `Gifts/Conveyor.cs` | `Update` → `TrySpawnNext` → `GiftFactory.Create`; `OnTriggerStay` двигает rigidbody | В сети спавнить и толкать должен только сервер. |
-| `Stealth/StealthUtil.cs` | `TryGetPlayer()` (только `LocalPlayer`); `IsPlayerCollider()` (фолбэк на `LocalPlayer`) | Дед, кот, конус зрения и скрипучий пол видят одного эльфа. |
-| `Stealth/Grandpa.cs` | `EnterChase`, `TickChasing`, `Catch` → `RaisePlayerCaught` | Гонится за `LocalPlayer`. Ловит «игрока вообще», а не конкретного эльфа. |
-| `Stealth/FatCat.cs`, `VisionCone.cs`, `NoiseZone.cs` | `TryGetPlayer` | То же самое. |
+| `Stealth/StealthUtil.cs` | `TryGetPlayer()` (только `LocalPlayer`); `IsPlayerCollider()` (фолбэк на `LocalPlayer`) | Дед, кот, конус зрения и скрипучий пол видят одного эльфа. **[РЕШЕНО (ит. 7): `StealthUtil` ищет ближайшего/любого эльфа без аллокаций]** |
+| `Stealth/Grandpa.cs` | `EnterChase`, `TickChasing`, `Catch` → `RaisePlayerCaught` | Гонится за `LocalPlayer`. Ловит «игрока вообще», а не конкретного эльфа. **[ЧАСТИЧНО (ит. 15): поимка одного эльфа выкидывает его в камин, проигрыш только когда пойман последний]** |
+| `Stealth/FatCat.cs`, `VisionCone.cs`, `NoiseZone.cs` | `TryGetPlayer` | То же самое. **[РЕШЕНО (ит. 7): через `StealthUtil`]** |
 | `Audio/AudioManager.cs` | `LocalSurface()` → `LocalPlayer` | Поверхность для звука шагов берётся у одного игрока. |
 | `UI/HudView.cs` (~313) | `GameServices.LocalPlayer` | Один HUD: стамина, шум, подсказки. |
 | `UI/UIRoot.cs` (~330) | `Keyboard.current` | UI слушает глобальную клавиатуру. |

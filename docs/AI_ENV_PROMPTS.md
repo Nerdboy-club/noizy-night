@@ -1,5 +1,46 @@
 # Промпты для Gemini: комнаты, окружение, предметы
 
+## Проверенный пайплайн (Unity-порт)
+
+**Gemini (концепт) → Tripo Image-to-3D (GLB) → Blender-скрипт из `art/blender/` → FBX в Unity.**
+
+1. Gemini: концепт одного предмета/персонажа на белом фоне.
+2. Tripo Image-to-3D: скачать `.glb` (высокополигональный, с текстурой).
+3. Blender (headless), из корня репозитория:
+   - **Проп** (мебель, подарки, декор):
+     `blender -b -P art/blender/prep_prop.py -- <in.glb> <Name> <Room> <height_m> [tris=25000] [tex=1024]`
+     Результат: `unity/SilentNight/Assets/_Project/Art/Environment/<Room>/<Name>.fbx` (+ `<Name>_Textures`), pivot в центре пола, децимация, масштаб до заданной высоты.
+   - **Эльф**: `blender --background --python art/blender/rig_tripo_elf.py -- <input.glb> [target_tris=30000]` (риг с Mixamo-именами костей + процедурные клипы; `Elf_Tripo.fbx`, `Animations/Elf_Clips.fbx`).
+   - **Кот**: `blender -b -P art/blender/rig_cat.py -- <cat.glb> [target_tris=20000]` (Generic rig, клипы Idle/Walk/Run/Sleep/Alert; `Art/Characters/Cat/`).
+   - **Три ёлочных шарика в одном GLB**: `prep_ornaments.py -- <glb>` режет на `Ornament_Red/Blue/Green.fbx` (по 0,16 м) в `Art/Environment/Decor`.
+4. Unity: меню `Silent Night ▸ Build Animator Controllers` и пересборка сцен сборщиком.
+
+**Стиль, который понравился:** `3D game prop ..., cozy miniature stop-motion plasticine style, isolated on white background` (пластилиновый «Tactile Christmas Chaos»). Один предмет на картинку, без фона и теней.
+
+**Идея кастомизации ёлки:** генерировать голую ёлку отдельно, а игрушки — отдельными пропами (`prep_ornaments.py`), чтобы игрок мог украшать её сам.
+
+### Статус ассетов
+
+| Ассет | Статус |
+|---|---|
+| Эльф | ГОТОВО (Tripo, `rig_tripo_elf.py`) |
+| Кот | ГОТОВО (`rig_cat.py`) |
+| Верстак | ГОТОВО |
+| Камин | ГОТОВО |
+| Ёлка | ГОТОВО (голая ёлка) |
+| Мешок | ГОТОВО |
+| Ёлочные игрушки (Red/Blue/Green) | ГОТОВО |
+| Дед | НУЖНО |
+| Сани | НУЖНО |
+| Конвейер | НУЖНО |
+| Доска заказов | НУЖНО |
+| Подарки (коробки, велосипед, шар, шкатулка, машинка) | НУЖНО (пока серые коробки) |
+| Детали крыш | НУЖНО |
+
+Часть мебели берётся из CC0-паков Kenney (не генерируется).
+
+---
+
 Дополняет `AI_ASSET_PROMPTS.md` (там персонажи и подарки). Здесь окружение: Хаб Санты и 5 комнат дома.
 
 ## Как работаем (пайплайн)

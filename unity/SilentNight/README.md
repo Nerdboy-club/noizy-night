@@ -1,46 +1,85 @@
 # Operation: Silent Night — Unity
 
-Порт игры с three.js на Unity 6 под Steam/ПК. Код написан на Mac **без Unity**, поэтому первая сборка на ПК — это проверка компиляции. Ошибки ожидаемы, их немного, и они быстро чинятся (см. «Если не компилируется»).
+Порт игры с three.js на Unity 6 (ПК/Steam). Кооперативная стелс-игра: эльфы тайком доставляют подарки в дом, где спит Дед. Состояние: рабочий прототип (по оценке ночного отчёта ~60% до демо), см. «Что есть».
 
-## Что нужно на ПК
-1. **Unity Hub** — unity.com/download, войти в аккаунт Unity (Personal бесплатно).
-2. В Hub → Installs → Install Editor → **Unity 6 LTS** (последняя `6000.0.x LTS`).
-   Модули: **Windows Build Support (IL2CPP)**, по желанию **Mac Build Support**. Visual Studio Community Hub предложит поставить сам — соглашайся (для C#).
-3. Свободно ~15 ГБ.
+## Требования
+- **Unity Hub** и редактор **Unity 6000.6.8f1** (модуль Windows Build Support). Пакеты (URP 17.6, Input System 1.20, Cinemachine, AI Navigation) подтянутся из `Packages/manifest.json`.
+- Для арт-скриптов (необязательно): Blender.
 
 ## Первый запуск
-1. Скопируй папку `unity/SilentNight` на ПК (или склонируй репозиторий).
-2. Unity Hub → **Add** → **Add project from disk** → выбери папку `SilentNight`.
-   Hub спросит версию — выбери установленную Unity 6 LTS. Первое открытие идёт долго (скачиваются пакеты из `Packages/manifest.json`).
-3. Если Unity спросит «Enable the new Input System backends? (restart)» — **Yes**.
-4. Меню **Silent Night ▸ Setup Project** — создаёт слои, теги, URP-рендер и настройки.
-5. Меню **Silent Night ▸ Build Greybox Scenes** — собирает сцены `Boot`, `Hub`, `House` из кода и добавляет их в Build Settings.
-6. Открой `Assets/_Project/Scenes/Boot.unity` и нажми **Play**.
+1. Unity Hub > Add > Add project from disk > папка `unity/SilentNight`, версия 6000.6.8f1. Если спросит про Input System backends — Yes.
+2. Меню **Silent Night**:
+   1. **Setup Project** — слои, теги, URP, настройки.
+   2. **Build Greybox Scenes** — собирает `Boot`, `Hub`, `Rooftop`, `House`, добавляет в Build Settings.
+   3. **Fix Environment Materials** — URP-материалы и текстуры для импортированных моделей.
+   4. **Build Animator Controllers** — контроллеры эльфа, кота, Деда.
+3. Откройте `Assets/_Project/Scenes/Boot.unity` и нажмите Play.
 
-Управление: WASD — ходьба, мышь — камера, Shift — бег, C — красться, Space — прыжок, Q — реактивный ранец (после покупки), E — взять/использовать, R — мешок, Tab — доска заказов, V — дальность камеры, колесо — зум, Esc — пауза. Геймпад тоже работает.
+Batchmode (редактор должен быть закрыт):
+```
+Unity.exe -batchmode -quit -projectPath unity/SilentNight -executeMethod SilentNight.EditorTools.GreyboxSceneBuilder.BuildAll
+Unity.exe -batchmode -projectPath unity/SilentNight -runTests -testPlatform PlayMode -testResults results.xml
+Unity.exe -batchmode -projectPath unity/SilentNight -runTests -testPlatform PlayMode -testFilter SilentNight.Tests.ScreenshotCapture
+```
+Последняя команда запускает `[Explicit]`-тест скриншотов (папка `SN_SHOT_DIR`, иначе `Screenshots/`).
 
-## Если не компилируется
-Unity покажет ошибки в окне **Console** (красные строки). Скопируй их все (или скриншот) и пришли мне — я исправлю. В коде места, где я не был уверен в API, помечены комментарием `// VERIFY:` — ошибки скорее всего там.
+## Управление
+| Действие | Клавиатура/мышь | Геймпад |
+|---|---|---|
+| Ходьба / камера | WASD / мышь | левый / правый стик |
+| Бег | Shift | см. `ElfInput.cs` |
+| Красться (тише, укрытия) | C | см. `ElfInput.cs` |
+| Прыжок / ранец (после покупки) | Space / Q | см. `ElfInput.cs` |
+| Взять, использовать, нырнуть в трубу, поднять друга, взяться за велосипед | E | см. `ElfInput.cs` |
+| Мешок | R | — |
+| Кошачья мята | F | LB |
+| Доска заказов | Tab | — |
+| Дальность камеры / зум | V / колесо | — |
+| Пауза | Esc | — |
+| Отладочное падение | G | — |
 
-Если ругается на версию пакета в `Packages/manifest.json` — открой **Window ▸ Package Manager** и обнови пакет до версии, которую он предлагает.
+Точная раскладка геймпада задаётся в `ElfInput.cs`.
+
+## Игровой цикл
+1. **Хаб:** взять заказ на доске, собрать подарки с конвейера, загрузить в сани, купить апгрейды и мяту на верстаке.
+2. **Крыши (Rooftop):** паркур по заснеженным крышам (пандусы, ледяные скаты, сугробы). Адрес заказа указывает номер нужной трубы из 15; [E] у неё — спуск. Неправильная труба даёт подсказку.
+3. **Дом (House):** тихо донести подарки под ёлку, не разбудить Деда (шум, конус зрения), не наступить коту на хвост. Хрупкий шар нести аккуратно, шкатулка тикает и звенит, машинка отвлекает, игрушки на полу роняют бегущего, двери скрипят, телевизор шумит. Прятаться под мебелью в приседе.
+4. Выход через камин -> результаты со званием и смешными итогами -> чаевые -> Хаб.
+
+## Что есть и чего нет
+**Есть:** весь цикл Хаб -> Крыши -> Дом -> Результаты; активный рэгдолл-эльф; стелс (Дед, кот, укрытия, двери, ТВ); механики подарков; локальный кооператив; синтезированный звук; эффекты; PlayMode-тесты (38 по ночному отчёту).
+**Нет или сырое:** сетевой кооператив; отдельный HUD для каждого игрока; модели Деда, саней, конвейера, доски заказов и подарков (серые заглушки); настоящие аудиофайлы; полировка UI (верстак и результаты могут не влезать на 1080p). Ощущение управления и вид эффектов вручную почти не проверялись.
+
+## Кооператив (локальный, до 4 игроков)
+Игрок 1 — клавиатура/мышь. Остальные нажимают **Start или A** на свободном геймпаде: рядом появляется эльф другого цвета со своим управлением. Камера кадрирует всех; состав сохраняется при смене сцен, отключённый геймпад убирает эльфа.
+Совместные механики: «поднять друга» ([E] над упавшим, иначе он лежит 4 с), общая переноска велосипеда ([E] «Взяться за другой конец», скорость вдвое выше), столкновения лбами, подписи над эльфами. Поимка одного эльфа не проигрыш: Дед выкидывает его в камин; проигрыш, когда пойманы все. Сетевая версия: только план, `../../docs/COOP_PLAN.md`.
 
 ## Структура
 ```
 Assets/_Project/
-  Scripts/Core      — контракты: состояния, события, сервисы, профиль, GameFlow
-  Scripts/Player    — эльф: движение, мешок, взаимодействие, камера (Cinemachine)
-  Scripts/Stealth   — Дед (NavMesh AI, слух, зрение), кот, скрипучие зоны
-  Scripts/Gifts     — подарки, конвейер, сани, ёлка, камин, настроение дома
-  Scripts/UI        — интерфейс на UI Toolkit (меню, HUD, доска заказов, верстак)
-  Scripts/Audio     — звук и музыка (клипы из Resources/Audio)
-  Scripts/Editor    — Setup Project, сборщик сцен, импорт Mixamo-анимаций
-  Art/              — сюда класть модели (.fbx/.glb) персонажей и пропсов
-  Audio/            — сюда звуки (список имён в Audio/README.md)
+  Scripts/Core      — контракты: события, сервисы, профиль, GameFlow
+  Scripts/Player    — эльф, рэгдолл, камера, кооператив
+  Scripts/Stealth   — Дед, кот, укрытия, двери, ТВ
+  Scripts/Gifts     — подарки, конвейер, сани, ёлка, верстак
+  Scripts/Rooftop   — крыши, трубы, сугробы, ледяные скаты
+  Scripts/FX        — сажа, дым, пыль
+  Scripts/UI        — HUD, меню, доска, верстак, результаты, RunStats
+  Scripts/Audio     — AudioManager, ProceduralSfx
+  Scripts/Editor    — Setup, сборщик сцен, контроллеры, материалы
+  Scenes/           — Boot, Hub, Rooftop, House (генерируются)
+  Art/              — Characters (Elf, Cat, Grandpa), Environment (комнаты, Textures, Packs/Kenney*)
+  Settings/         — материалы, пост-обработка
+  Tests/PlayMode/   — автотесты
+../../art/blender/  — Blender-скрипты подготовки моделей
+../../docs/         — COOP_PLAN, промпты для ИИ-арта
 ```
-Архитектура и правила модулей — в `ARCHITECTURE.md`.
+Правила модулей и подробности: `ARCHITECTURE.md`.
 
-## Графика: что дальше
-Сейчас всё на заглушках из примитивов (greybox) — это нормально для проверки геймплея.
-1. **Окружение**: бесплатные CC0-паки (Kenney Furniture Kit / Holiday Kit, Quaternius Ultimate Furniture и т.п.) — импорт в `Art/Environment`, затем расставляем в сценах вместо серых коробок.
-2. **Персонажи и ключевые предметы**: генерация через ИИ по промптам из `../../docs/AI_ASSET_PROMPTS.md` (Meshy/Tripo + Mixamo).
-   Кладёшь модель в `Art/Characters/Elf/` и анимации Mixamo в `Art/Characters/Elf/Animations/`, затем меню **Silent Night ▸ Build Animator Controllers**. В компоненте `ElfVisual` / `NPCVisual` / `GiftVisual` указываешь Model Prefab — заглушка заменится на модель.
+## Арт-воркфлоу
+1. Сгенерировать модель в Tripo/Meshy по промптам из `docs/AI_ASSET_PROMPTS.md` и `AI_ENV_PROMPTS.md`.
+2. Пропсы: `blender -b -P art/blender/prep_prop.py -- in.glb Name Room height_m` — FBX и `Name_Textures` попадут в `Art/Environment/<Room>/`. Эльф: `rig_tripo_elf.py`; кот: `rig_cat.py`.
+3. В Unity: **Fix Environment Materials**, **Build Animator Controllers**, затем **Build Greybox Scenes** — сборщик подставит модели вместо заглушек.
+4. Бесплатные CC0-паки Kenney лежат в `Art/Environment/Packs`.
+
+## Если не компилируется
+Скопируйте красные строки из Console. Места с неуверенным API помечены `// VERIFY:`. Если ругается на версию пакета — обновите его в Package Manager.

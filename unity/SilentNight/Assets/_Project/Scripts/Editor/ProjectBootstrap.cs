@@ -379,21 +379,33 @@ namespace SilentNight.EditorTools
             }
 
             var bloom = profile.Add<Bloom>(true);
-            bloom.threshold.Override(1.0f);
-            bloom.intensity.Override(0.45f);
-            bloom.scatter.Override(0.6f);
+            bloom.threshold.Override(0.85f);
+            bloom.intensity.Override(0.9f);
+            bloom.scatter.Override(0.7f);
+            bloom.tint.Override(new Color(1f, 0.85f, 0.65f));
 
             var tonemap = profile.Add<Tonemapping>(true);
             tonemap.mode.Override(TonemappingMode.ACES);
 
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.Override(0.22f);
-            vignette.smoothness.Override(0.4f);
+            vignette.intensity.Override(0.32f);
+            vignette.smoothness.Override(0.45f);
+
+            // Miniature / stop-motion diorama look: the far room softly out of focus.
+            var dof = profile.Add<DepthOfField>(true);
+            dof.mode.Override(DepthOfFieldMode.Gaussian);
+            dof.gaussianStart.Override(5f);
+            dof.gaussianEnd.Override(16f);
+            dof.gaussianMaxRadius.Override(1.1f);
+            dof.highQualitySampling.Override(true);
+
+            var wb = profile.Add<WhiteBalance>(true);
+            wb.temperature.Override(8f);
 
             var color = profile.Add<ColorAdjustments>(true);
             color.postExposure.Override(0.15f);
-            color.contrast.Override(8f);
-            color.saturation.Override(6f);
+            color.contrast.Override(14f);
+            color.saturation.Override(12f);
             color.colorFilter.Override(new Color(1f, 0.96f, 0.9f));
 
             foreach (VolumeComponent c in profile.components)

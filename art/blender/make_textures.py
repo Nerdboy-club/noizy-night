@@ -82,10 +82,10 @@ def wall():
 
 
 def carpet():
-    img = col((0.55, 0.10, 0.13)) + 0.08 * noise(0.8, seed=5)[..., None] + 0.04 * noise(2.5, seed=6)[..., None]
+    img = col((0.46, 0.13, 0.13)) + 0.025 * noise(1.5, seed=5)[..., None] + 0.03 * noise(6, seed=6)[..., None]
     y, x = np.mgrid[0:N, 0:N]
     knit = (np.sin((x + y) * 2 * np.pi * 64 / N) * 0.5 + 0.5)
-    img *= (0.9 + 0.12 * knit[..., None])
+    img *= (0.95 + 0.06 * knit[..., None])
     save("Carpet", img)
 
 

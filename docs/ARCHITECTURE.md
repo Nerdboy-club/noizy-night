@@ -1,3 +1,7 @@
+> **Это архитектура оригинального веб-прототипа (Three.js + Rapier, папки `/src` и `/playground`).**
+> Актуальный продукт — порт на Unity 6: см. [`unity/SilentNight/ARCHITECTURE.md`](../unity/SilentNight/ARCHITECTURE.md)
+> и [`unity/SilentNight/README.md`](../unity/SilentNight/README.md). Документ ниже сохранён как справка по прототипу и больше не обновляется.
+
 # Архитектура проекта: Operation: Silent Night
 
 ## 1. Краткое описание
