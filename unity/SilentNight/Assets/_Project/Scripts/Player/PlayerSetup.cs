@@ -57,6 +57,7 @@ namespace SilentNight.Player
             go.AddComponent<ElfAnimator>();
             go.AddComponent<ElfRagdoll>();
             go.AddComponent<CatnipThrower>(); // [F] / LB: throw catnip (after ElfInput + ElfRagdoll, which it caches in Awake)
+            go.AddComponent<ElfBonk>(); // co-op: elves running into each other bonk heads / shove (no-op solo)
             if (primary)
             {
                 go.AddComponent<ThirdPersonCameraRig>();

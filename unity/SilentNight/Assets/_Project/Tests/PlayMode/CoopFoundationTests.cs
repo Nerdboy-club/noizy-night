@@ -233,6 +233,45 @@ namespace SilentNight.Tests
             finally { ev.RemoveEventHandler(null, h); }
             UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
         }
+        [UnityTest]
+        public IEnumerator Hub_ElvesRunningIntoEachOtherBonk()
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/Hub.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(0.5f);
+            var pad = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>();
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            joinT.GetMethod("Join").Invoke(UnityEngine.Object.FindAnyObjectByType(joinT), new object[] { pad });
+            yield return new WaitForSeconds(1f);
+
+            Type inputT = Type.GetType("SilentNight.Player.ElfInput, Assembly-CSharp", true);
+            Type ctrlT = Type.GetType("SilentNight.Player.ElfController, Assembly-CSharp", true);
+            Type ragT = Type.GetType("SilentNight.Player.ElfRagdoll, Assembly-CSharp", true);
+            Type bonkT = Type.GetType("SilentNight.Player.ElfBonk, Assembly-CSharp", true);
+            Component p1 = null, p2 = null;
+            foreach (var c in UnityEngine.Object.FindObjectsByType(inputT, FindObjectsSortMode.None))
+                if ((int)inputT.GetProperty("PlayerIndex").GetValue(c) == 0) p1 = (Component)c; else p2 = (Component)c;
+
+            float yaw = Camera.main.transform.eulerAngles.y;
+            Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            Vector3 p = new Vector3(0f, 0.02f, 0f);
+            ctrlT.GetMethod("Teleport").Invoke(p1.GetComponent(ctrlT), new object[] { p, Quaternion.identity, true });
+            ctrlT.GetMethod("Teleport").Invoke(p2.GetComponent(ctrlT), new object[] { p + fwd * 1.6f, Quaternion.identity, true });
+            yield return null;
+            bonkT.GetProperty("BonkCount").SetValue(null, 0);
+
+            inputT.GetField("DebugMoveOverride").SetValue(null, new Vector2(0f, 1f));
+            UnityEngine.InputSystem.InputSystem.QueueStateEvent(pad, new UnityEngine.InputSystem.LowLevel.GamepadState { leftStick = new Vector2(0f, -1f) });
+            float t = 0f;
+            while (t < 1.2f && (int)bonkT.GetProperty("BonkCount").GetValue(null) == 0) { t += Time.deltaTime; yield return null; }
+            inputT.GetField("DebugMoveOverride").SetValue(null, null);
+            UnityEngine.InputSystem.InputSystem.QueueStateEvent(pad, new UnityEngine.InputSystem.LowLevel.GamepadState());
+            yield return null;
+            Assert.AreEqual(1, (int)bonkT.GetProperty("BonkCount").GetValue(null), "head-on collision bonks");
+            Assert.IsTrue((bool)ragT.GetProperty("IsLimp").GetValue(p1.GetComponent(ragT)), "elf 1 falls");
+            Assert.IsTrue((bool)ragT.GetProperty("IsLimp").GetValue(p2.GetComponent(ragT)), "elf 2 falls");
+            UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
+        }
     }
 }
 #endif
