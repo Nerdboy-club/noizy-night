@@ -260,6 +260,7 @@ namespace SilentNight.EditorTools
             };
             var rng = new System.Random(7);
             var chimneys = new List<Object>();
+            var chimPos = new Vector2[rows, cols]; // chimney x/z per roof: traversal toys keep clear of it
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             for (int r = 0; r < rows; r++)
@@ -297,6 +298,7 @@ namespace SilentNight.EditorTools
                     // Chimney with a floating number label (numbers are assigned at runtime).
                     float cx = x + (float)(rng.NextDouble() - 0.5) * (w - 3f);
                     float cz = z + (float)(rng.NextDouble() - 0.5) * (d - 3f) + 0.4f;
+                    chimPos[r, c] = new Vector2(cx, cz);
                     GameObject ch = Box(env, "Chimney_" + tag, new Vector3(cx, y + 0.9f, cz), new Vector3(0.9f, 1.8f, 0.9f), ProjectBootstrap.MatBrick);
                     Box(env, "ChimneyCap_" + tag, new Vector3(cx, y + 1.86f, cz), new Vector3(1.15f, 0.14f, 1.15f), ProjectBootstrap.MatSnow, false);
                     Box(env, "ChimneyHole_" + tag, new Vector3(cx, y + 1.94f, cz), new Vector3(0.6f, 0.04f, 0.6f), ProjectBootstrap.MatDark, false);
@@ -326,6 +328,11 @@ namespace SilentNight.EditorTools
                     chimneys.Add(chim);
                 }
             }
+
+            // Traversal toys: snowy ramps between roofs, icy slopes, crate perches and soft snow drifts.
+            BuildRooftopRamps(env, heights, rows, cols, w, d, gap);
+            BuildRooftopIceSlopes(env, heights, chimPos, w + gap, d + gap);
+            BuildRooftopCushions(env, heights, chimPos, w, w + gap, d + gap);
 
             // Santa's sleigh parked on the first roof.
             var sleigh = new GameObject("ParkedSleigh").transform;
@@ -369,6 +376,138 @@ namespace SilentNight.EditorTools
 
             MakeStatic(env.gameObject);
             SaveAndBake(scene, RooftopPath);
+        }
+
+        /// <summary>Tilted slab (box with collider) whose top face centre line runs from <paramref name="from"/> to
+        /// <paramref name="to"/>. Its +Z points from -> to (uphill when from is the low end).</summary>
+        private static GameObject Slab(Transform parent, string name, Vector3 from, Vector3 to, float width, float thick, string mat)
+        {
+            Vector3 dir = to - from;
+            float len = dir.magnitude;
+            Quaternion rot = Quaternion.LookRotation(dir / len, Vector3.up);
+            Vector3 center = (from + to) * 0.5f - rot * Vector3.up * (thick * 0.5f);
+            GameObject go = Box(parent, name, center, new Vector3(width, thick, len), mat);
+            go.transform.rotation = rot;
+            return go;
+        }
+
+        /// <summary>Snowy ramps across the gap between side-by-side roofs (along X, no parapets there) that differ by
+        /// >= 0.3 m, on every other edge (checkerboard): run 1.75 m, 10–14.5°. The other gaps stay jumps.</summary>
+        private static void BuildRooftopRamps(Transform env, float[,] heights, int rows, int cols, float w, float d, float gap)
+        {
+            float pitchX = w + gap, pitchZ = d + gap;
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols - 1; c++)
+                {
+                    if ((r + c) % 2 != 0) continue;
+                    float yA = heights[r, c], yB = heights[r, c + 1];
+                    if (Mathf.Abs(yA - yB) < 0.29f) continue;
+                    float edgeA = c * pitchX + w * 0.5f, edgeB = edgeA + gap;
+                    float z = r * pitchZ + (r % 2 == 0 ? -1f : 1f);
+                    Vector3 low, high;
+                    if (yA < yB) { low = new Vector3(edgeA - 0.7f, yA, z); high = new Vector3(edgeB + 0.05f, yB, z); }
+                    else { low = new Vector3(edgeB + 0.7f, yB, z); high = new Vector3(edgeA - 0.05f, yA, z); }
+
+                    GameObject ramp = Slab(env, $"SnowRamp_{r}_{c}", low, high, 1.2f, 0.2f, ProjectBootstrap.MatSnow);
+                    ramp.AddComponent<SurfaceTag>().Surface = SurfaceType.Default;
+                    // Snow lumps along the sides (decor).
+                    Vector3 mid = (low + high) * 0.5f;
+                    Ball(env, "RampSnowL", mid + new Vector3(0f, 0.02f, -0.62f), new Vector3(1.4f, 0.18f, 0.22f), ProjectBootstrap.MatSnow);
+                    Ball(env, "RampSnowR", mid + new Vector3(0f, 0.02f, 0.62f), new Vector3(1.4f, 0.18f, 0.22f), ProjectBootstrap.MatSnow);
+                }
+            }
+        }
+
+        /// <summary>Icy slopes on four roofs: a 1.9 m ice slab rising 0.5 m (~14.7°) onto a wooden roof hatch, on the
+        /// side of the roof away from the chimney. IceSlope drags a standing elf downhill.</summary>
+        private static void BuildRooftopIceSlopes(Transform env, float[,] heights, Vector2[,] chimPos, float pitchX, float pitchZ)
+        {
+            int[,] roofs = { { 0, 2 }, { 1, 3 }, { 2, 0 }, { 2, 4 } };
+            const float rise = 0.5f, run = 1.9f;
+            for (int i = 0; i < roofs.GetLength(0); i++)
+            {
+                int r = roofs[i, 0], c = roofs[i, 1];
+                string tag = r + "_" + c;
+                float x = c * pitchX, y = heights[r, c], z = r * pitchZ;
+                float side = chimPos[r, c].x >= x ? -1f : 1f;
+                float hx = x + side * 2.2f;
+
+                // Roof hatch the slope leads onto (z + 0.3 .. z + 1.7).
+                Box(env, "IceHatch_" + tag, new Vector3(hx, y + rise * 0.5f, z + 1.0f), new Vector3(1.4f, rise, 1.4f), ProjectBootstrap.MatDarkWood);
+                Box(env, "IceHatchSnow_" + tag, new Vector3(hx, y + rise - 0.03f, z + 1.0f), new Vector3(1.5f, 0.06f, 1.5f), ProjectBootstrap.MatSnow, false);
+
+                Vector3 low = new Vector3(hx, y, z + 0.3f - run);
+                Vector3 high = new Vector3(hx, y + rise, z + 0.3f);
+                GameObject slab = Slab(env, "IceSlope_" + tag, low, high, 1.2f, 0.12f, ProjectBootstrap.MatIce);
+                slab.AddComponent<SurfaceTag>().Surface = SurfaceType.Ice;
+
+                var zoneGo = new GameObject("IceSlopeZone_" + tag);
+                zoneGo.transform.SetParent(env, false);
+                zoneGo.transform.SetPositionAndRotation((low + high) * 0.5f, slab.transform.rotation);
+                var bc = zoneGo.AddComponent<BoxCollider>();
+                bc.isTrigger = true;
+                bc.center = new Vector3(0f, 0.3f, 0f);
+                bc.size = new Vector3(1.2f, 0.6f, (high - low).magnitude - 0.1f);
+                zoneGo.AddComponent<SurfaceTag>().Surface = SurfaceType.Ice;
+                zoneGo.AddComponent<SilentNight.Rooftop.IceSlope>();
+            }
+        }
+
+        /// <summary>Soft snow drifts: two under crate perches (steps 0.5/1.0/1.5 m up to a 2 m water-tank stand — jumping
+        /// off it onto bare roof is a ragdoll fall, onto the drift it is not) and three in jump-gap landing zones.</summary>
+        private static void BuildRooftopCushions(Transform env, float[,] heights, Vector2[,] chimPos, float w, float pitchX, float pitchZ)
+        {
+            int[,] perches = { { 0, 3 }, { 2, 1 } };
+            for (int i = 0; i < perches.GetLength(0); i++)
+            {
+                int r = perches[i, 0], c = perches[i, 1];
+                string tag = r + "_" + c;
+                float x = c * pitchX, y = heights[r, c], z = r * pitchZ;
+                float px = x + (chimPos[r, c].x >= x ? -2f : 2f);
+
+                float[] stepH = { 0.5f, 1.0f, 1.5f };
+                for (int k = 0; k < stepH.Length; k++)
+                    Box(env, $"PerchCrate_{tag}_{k}", new Vector3(px, y + stepH[k] * 0.5f, z - 2.0f + k * 0.9f), new Vector3(0.9f, stepH[k], 0.9f),
+                        k % 2 == 0 ? ProjectBootstrap.MatWood : ProjectBootstrap.MatDarkWood, true, k * 4f);
+                Box(env, "PerchStand_" + tag, new Vector3(px, y + 1.0f, z + 0.85f), new Vector3(1.2f, 2.0f, 1.2f), ProjectBootstrap.MatMetal);
+                Box(env, "PerchSnow_" + tag, new Vector3(px, y + 1.97f, z + 0.85f), new Vector3(1.3f, 0.06f, 1.3f), ProjectBootstrap.MatSnow, false);
+                Box(env, "PerchFlagPole_" + tag, new Vector3(px + 0.5f, y + 2.5f, z + 0.4f), new Vector3(0.04f, 1.0f, 0.04f), ProjectBootstrap.MatMetal, false);
+                Box(env, "PerchFlag_" + tag, new Vector3(px + 0.5f, y + 2.85f, z + 0.6f), new Vector3(0.02f, 0.25f, 0.4f), ProjectBootstrap.MatRed, false);
+
+                SnowCushionAt(env, "SnowDrift_Perch_" + tag, new Vector3(px, y, z + 2.5f), new Vector2(1.6f, 1.8f));
+            }
+
+            // Landing zones just past jump gaps (higher roof -> lower roof), at the west edge of the lower roof.
+            int[,] landings = { { 0, 4 }, { 1, 1 }, { 2, 2 } };
+            for (int i = 0; i < landings.GetLength(0); i++)
+            {
+                int r = landings[i, 0], c = landings[i, 1];
+                float x = c * pitchX, y = heights[r, c], z = r * pitchZ;
+                float dz = chimPos[r, c].y > z + 0.4f ? -2.2f : 2.6f; // keep clear of the chimney
+                SnowCushionAt(env, $"SnowDrift_Gap_{r}_{c}", new Vector3(x - w * 0.5f + 0.85f, y, z + dz), new Vector2(1.4f, 1.4f));
+            }
+        }
+
+        /// <summary>Snow pile: walkable 12 cm base (collider), visual mound, and a SnowCushion trigger 0.1–1.8 m above it.</summary>
+        private static void SnowCushionAt(Transform parent, string name, Vector3 ground, Vector2 size)
+        {
+            var root = new GameObject(name).transform;
+            root.SetParent(parent, false);
+            root.position = ground;
+            GameObject b = Box(root, "Base", ground + Vector3.up * 0.06f, new Vector3(size.x, 0.12f, size.y), ProjectBootstrap.MatSnow);
+            b.AddComponent<SurfaceTag>().Surface = SurfaceType.Default;
+            Ball(root, "Mound", ground + Vector3.up * 0.12f, new Vector3(size.x * 0.95f, 0.55f, size.y * 0.95f), ProjectBootstrap.MatSnow);
+            Ball(root, "Lump", ground + new Vector3(size.x * 0.25f, 0.18f, -size.y * 0.2f), new Vector3(0.6f, 0.4f, 0.6f), ProjectBootstrap.MatSnow);
+            Ball(root, "Lump", ground + new Vector3(-size.x * 0.28f, 0.15f, size.y * 0.22f), new Vector3(0.55f, 0.35f, 0.5f), ProjectBootstrap.MatSnow);
+
+            var zone = new GameObject("CushionZone");
+            zone.transform.SetParent(root, false);
+            zone.transform.position = ground + Vector3.up * 0.95f;
+            var bc = zone.AddComponent<BoxCollider>();
+            bc.isTrigger = true;
+            bc.size = new Vector3(size.x, 1.7f, size.y);
+            zone.AddComponent<SilentNight.Rooftop.SnowCushion>();
         }
 
         private static void CreateSnowParticles(Transform parent, Vector3 center)

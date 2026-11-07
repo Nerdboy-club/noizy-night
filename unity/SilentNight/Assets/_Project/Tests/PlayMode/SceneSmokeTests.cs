@@ -206,6 +206,25 @@ namespace SilentNight.Tests
             Assert.IsTrue(blocked, "the bike stops at the wall instead of clipping through");
             Assert.Less(ctrl.transform.position.x, -0.1f, "elf did not pass into the wall");
         }
+        [UnityTest]
+        public IEnumerator Rooftop_ElfRunsUpTheSnowRamp()
+        {
+            yield return Load("Rooftop");
+            yield return new WaitForSeconds(1f);
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Component rig = Find("SilentNight.Player.ThirdPersonCameraRig");
+            var yaw = rig.GetType().GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            ctrl.GetType().GetMethod("Teleport").Invoke(ctrl, new object[] { new Vector3(2.4f, 0.05f, -1f), Quaternion.Euler(0f, 90f, 0f), true });
+            yield return new WaitForSeconds(0.3f);
+            SetMove(new Vector2(0f, 1f));
+            float t = 0f;
+            while (t < 2.5f) { yaw.SetValue(rig, 90f); t += Time.deltaTime; yield return null; }
+            SetMove(null);
+            Vector3 p = ctrl.transform.position;
+            Debug.Log("[Smoke] after ramp: " + p);
+            Assert.Greater(p.x, 5.2f, "walked over the ramp onto the next roof");
+            Assert.Greater(p.y, 0.3f, "stands on the higher roof");
+        }
     }
 }
 #endif
