@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1644447508
+--- !u!1 &196267306
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,8 +127,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1644447510}
-  - component: {fileID: 1644447509}
+  - component: {fileID: 196267308}
+  - component: {fileID: 196267307}
   m_Layer: 0
   m_Name: AudioManager
   m_TagString: Untagged
@@ -136,13 +136,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1644447509
+--- !u!114 &196267307
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1644447508}
+  m_GameObject: {fileID: 196267306}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 60638ff2c7b016147a95fbbed8a44e35, type: 3}
@@ -164,13 +164,13 @@ MonoBehaviour:
   maxVariants: 8
   useProceduralFallback: 1
   proceduralMusic: 1
---- !u!4 &1644447510
+--- !u!4 &196267308
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1644447508}
+  m_GameObject: {fileID: 196267306}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -179,7 +179,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1650291556
+--- !u!1 &338172478
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -187,8 +187,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1650291558}
-  - component: {fileID: 1650291557}
+  - component: {fileID: 338172480}
+  - component: {fileID: 338172479}
   m_Layer: 0
   m_Name: GameFlow
   m_TagString: Untagged
@@ -196,25 +196,25 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1650291557
+--- !u!114 &338172479
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1650291556}
+  m_GameObject: {fileID: 338172478}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f104d96966b9a6b4683180559679fba9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SilentNight.Core.GameFlow
---- !u!4 &1650291558
+--- !u!4 &338172480
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1650291556}
+  m_GameObject: {fileID: 338172478}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -223,7 +223,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1771411425
+--- !u!1 &1650679839
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -231,8 +231,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1771411427}
-  - component: {fileID: 1771411426}
+  - component: {fileID: 1650679841}
+  - component: {fileID: 1650679840}
   m_Layer: 0
   m_Name: UIRoot
   m_TagString: Untagged
@@ -240,13 +240,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1771411426
+--- !u!114 &1650679840
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1771411425}
+  m_GameObject: {fileID: 1650679839}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4650ff044d3f4644382cfc8825989f96, type: 3}
@@ -261,13 +261,13 @@ MonoBehaviour:
   handleOrdersKey: 1
   createEventSystemIfMissing: 1
   sortingOrder: 100
---- !u!4 &1771411427
+--- !u!4 &1650679841
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1771411425}
+  m_GameObject: {fileID: 1650679839}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -280,6 +280,6 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1650291558}
-  - {fileID: 1644447510}
-  - {fileID: 1771411427}
+  - {fileID: 338172480}
+  - {fileID: 196267308}
+  - {fileID: 1650679841}

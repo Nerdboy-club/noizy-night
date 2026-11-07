@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using SilentNight.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,12 +16,16 @@ namespace SilentNight.Player
     /// used keyboard/mouse or another pad (so a solo gamepad player pressing Start for the first time just pauses).
     /// Leave: unplugging the pad removes that elf (its held item and sack contents are dropped on the spot).
     ///
+    /// Roster: every join is remembered in a static roster (player index, sweater theme, gamepad deviceId). Joined elves
+    /// are scene objects and die with the scene; when the next scene's player 1 starts, every roster entry whose pad is
+    /// still connected is re-spawned next to player 1 in its old slot (one "Эльфы на месте: N" toast instead of
+    /// per-elf join toasts). Leave (pad unplugged / Leave()) forgets the entry. Carried items are not carried over.
+    ///
     /// Shared screen: extra elves have no camera rig; player 1's ThirdPersonCameraRig frames the whole group and
     /// extra elves move relative to Camera.main (ElfController.GetCameraYaw fallback).
     ///
     /// TODO (later steps):
-    /// - Roster (PlayerSlot index/devices/theme) that survives scene loads (DontDestroyOnLoad) + PlayerSpawner;
-    ///   right now joined elves are scene objects and must re-join after every scene change.
+    /// - PlayerSpawner (spawn per PlayerIndex instead of "next to player 1").
     /// - Split-screen option (per-player Camera/Brain/channel), per-player HUD (HudView shows LocalPlayer only),
     ///   per-player PlayerGate.CanControl / UI modal owner, ElfRagdoll debug key per player, leave via menu button,
     ///   re-join with the same slot after a pad reconnects, and a runtime model source for builds (ElfRagdoll uses
@@ -35,20 +40,94 @@ namespace SilentNight.Player
         [SerializeField] private bool allowJoin = true;
         [Tooltip("Distance (m) from player 1 at which a joining elf appears.")]
         [SerializeField] private float spawnOffset = 1f;
+        [Tooltip("On scene start, re-spawn the extra elves that joined in an earlier scene (if their pads are still connected).")]
+        [SerializeField] private bool restoreRoster = true;
 
         private ElfInput _host;
         private int _limitToastFrame = -1000;
+        private bool _restorePending;
 
-        /// <summary>Raised after an extra elf joined (player index 1..3).</summary>
+        /// <summary>Raised after an extra elf joined (player index 1..3). Not raised for roster restores.</summary>
         public static event System.Action<int, GameObject> PlayerJoined;
         /// <summary>Raised just before an extra elf is removed (player index 1..3).</summary>
         public static event System.Action<int> PlayerLeft;
+        /// <summary>Raised after the roster re-spawned extra elves on scene start (argument: number restored).</summary>
+        public static event System.Action<int> RosterRestored;
+
+        // ---------------- roster (survives scene loads) ----------------
+
+        /// <summary>One joined extra player: slot index, sweater theme and its gamepad.</summary>
+        private struct RosterEntry
+        {
+            public int PlayerIndex;
+            public int ThemeIndex;
+            public int DeviceId;
+            // Same-object check on top of the id: InputTestFixture (and Input System resets) can hand out the same
+            // deviceId again to a brand-new virtual pad, which must not inherit a stale slot.
+            public InputDevice Device;
+        }
+
+        private static readonly List<RosterEntry> s_Roster = new List<RosterEntry>(MaxLocalPlayers - 1);
+
+        /// <summary>Number of extra players (2..4) remembered across scene loads.</summary>
+        public static int RosterCount => s_Roster.Count;
+
+        /// <summary>True if the roster remembers <paramref name="device"/> as some extra player's gamepad.</summary>
+        public static bool IsInRoster(InputDevice device)
+        {
+            if (device == null) return false;
+            for (int i = 0; i < s_Roster.Count; i++)
+                if (s_Roster[i].DeviceId == device.deviceId && s_Roster[i].Device == device) return true;
+            return false;
+        }
+
+        /// <summary>Forgets every remembered extra player (tests / "back to main menu").</summary>
+        public static void ClearRoster() => s_Roster.Clear();
+
+        private static void RosterAdd(int playerIndex, int themeIndex, InputDevice device)
+        {
+            if (device == null || playerIndex <= 0) return;
+            for (int i = s_Roster.Count - 1; i >= 0; i--)
+                if (s_Roster[i].PlayerIndex == playerIndex || s_Roster[i].DeviceId == device.deviceId)
+                    s_Roster.RemoveAt(i);
+            s_Roster.Add(new RosterEntry
+            {
+                PlayerIndex = playerIndex,
+                ThemeIndex = themeIndex,
+                DeviceId = device.deviceId,
+                Device = device,
+            });
+            s_Roster.Sort((a, b) => a.PlayerIndex.CompareTo(b.PlayerIndex));
+        }
+
+        private static void RosterRemoveIndex(int playerIndex)
+        {
+            for (int i = s_Roster.Count - 1; i >= 0; i--)
+                if (s_Roster[i].PlayerIndex == playerIndex) s_Roster.RemoveAt(i);
+        }
+
+        private static void RosterRemoveDevice(InputDevice device)
+        {
+            if (device == null) return;
+            for (int i = s_Roster.Count - 1; i >= 0; i--)
+                if (s_Roster[i].DeviceId == device.deviceId || s_Roster[i].Device == device) s_Roster.RemoveAt(i);
+        }
+
+        /// <summary>The roster entry's pad if it is still the same, connected device; otherwise null.</summary>
+        private static Gamepad ResolvePad(RosterEntry e)
+        {
+            var pad = InputSystem.GetDeviceById(e.DeviceId) as Gamepad;
+            if (pad == null || !pad.added || pad != e.Device) return null;
+            return pad;
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             PlayerJoined = null;
             PlayerLeft = null;
+            RosterRestored = null;
+            s_Roster.Clear();
         }
 
         private void Awake() => _host = GetComponent<ElfInput>();
@@ -56,6 +135,50 @@ namespace SilentNight.Player
         private void OnEnable() => InputSystem.onDeviceChange += OnDeviceChange;
 
         private void OnDisable() => InputSystem.onDeviceChange -= OnDeviceChange;
+
+        private void Start()
+        {
+            if (!restoreRoster || s_Roster.Count == 0) return;
+            if (_host == null) _host = GetComponent<ElfInput>();
+            if (_host == null || _host.PlayerIndex != 0) return;
+            _restorePending = true;
+            StartCoroutine(RestoreRosterNextFrame());
+        }
+
+        /// <summary>
+        /// Waits one frame so player 1's ElfController.Start has already moved it to PlayerSpawn, then re-spawns every
+        /// roster entry whose pad is still connected (same slot, same sweater, same pad). Entries whose pad is gone are
+        /// forgotten. Entries already present in this scene (pad claimed / slot taken) are skipped.
+        /// </summary>
+        private IEnumerator RestoreRosterNextFrame()
+        {
+            yield return null;
+            _restorePending = false;
+            if (_host == null || _host.PlayerIndex != 0) yield break;
+
+            int restored = 0;
+            RosterEntry[] entries = s_Roster.ToArray();
+            for (int i = 0; i < entries.Length; i++)
+            {
+                RosterEntry e = entries[i];
+                Gamepad pad = ResolvePad(e);
+                if (pad == null)
+                {
+                    RosterRemoveIndex(e.PlayerIndex);
+                    continue;
+                }
+                if (ElfInput.IsGamepadClaimed(pad) || IsIndexUsed(e.PlayerIndex)) continue;
+                if (CountLocalElves() >= MaxLocalPlayers) break;
+
+                if (SpawnElf(pad, e.PlayerIndex, e.ThemeIndex, e.PlayerIndex - 1) != null) restored++;
+            }
+
+            if (restored > 0)
+            {
+                GameEvents.RaiseToast($"Эльфы на месте: {CountLocalElves()}");
+                RosterRestored?.Invoke(restored);
+            }
+        }
 
         private void Update()
         {
@@ -71,6 +194,8 @@ namespace SilentNight.Player
                 if (pad == null) continue;
                 if (!pad.startButton.wasPressedThisFrame && !pad.buttonSouth.wasPressedThisFrame) continue;
                 if (ElfInput.IsGamepadClaimed(pad)) continue;
+                // That friend is about to be re-spawned from the roster in its old slot: not a new join.
+                if (_restorePending && IsInRoster(pad)) continue;
                 if (pad == _host.LastUsedGamepad) continue;
                 // Player 1 has touched nothing but (maybe) this pad: the press belongs to player 1, not a newcomer.
                 if (_host.LastUsedGamepad == null && !_host.HasUsedKeyboardMouse) continue;
@@ -98,18 +223,36 @@ namespace SilentNight.Player
             return n;
         }
 
-        /// <summary>Smallest free player index in 1..3, or -1.</summary>
-        private static int FreePlayerIndex()
+        private static bool IsIndexUsed(int idx)
         {
             var all = ElfInput.All;
+            for (int i = 0; i < all.Count; i++)
+                if (all[i] != null && all[i].PlayerIndex == idx) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Smallest player index in 1..3 that is neither on screen nor reserved by a roster entry whose pad is still
+        /// connected (so a newcomer never steals a friend's slot), or -1.
+        /// </summary>
+        private static int FreePlayerIndex()
+        {
             for (int idx = 1; idx < MaxLocalPlayers; idx++)
             {
-                bool used = false;
-                for (int i = 0; i < all.Count; i++)
-                    if (all[i] != null && all[i].PlayerIndex == idx) { used = true; break; }
-                if (!used) return idx;
+                if (IsIndexUsed(idx) || IsIndexReserved(idx)) continue;
+                return idx;
             }
+            // Every free slot is reserved: fall back to any slot not on screen.
+            for (int idx = 1; idx < MaxLocalPlayers; idx++)
+                if (!IsIndexUsed(idx)) return idx;
             return -1;
+        }
+
+        private static bool IsIndexReserved(int idx)
+        {
+            for (int i = 0; i < s_Roster.Count; i++)
+                if (s_Roster[i].PlayerIndex == idx && ResolvePad(s_Roster[i]) != null) return true;
+            return false;
         }
 
         /// <summary>Spawns an extra elf for <paramref name="pad"/> next to player 1. Returns null if no slot is free.</summary>
@@ -119,17 +262,29 @@ namespace SilentNight.Player
             int index = FreePlayerIndex();
             if (index < 0) return null;
 
-            // The Start/South press also reached player 1 (it listens to unclaimed pads): no pause/jump this frame.
-            if (_host != null) _host.SuppressPresses();
-
-            Vector3 pos = FindSpawnPoint();
-            Quaternion rot = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
-            GameObject elf = PlayerSetup.CreatePlayer(pos, index, index, pad);
-            elf.transform.rotation = rot;
-            StartCoroutine(PlaceAfterStart(elf, pos, rot));
+            GameObject elf = SpawnElf(pad, index, index, 0);
+            if (elf == null) return null;
 
             GameEvents.RaiseToast($"Эльф {index + 1} присоединился!");
             PlayerJoined?.Invoke(index, elf);
+            return elf;
+        }
+
+        /// <summary>Creates the extra elf next to player 1 and records it in the roster (no toast, no event).</summary>
+        private GameObject SpawnElf(Gamepad pad, int index, int themeIndex, int firstDirection)
+        {
+            if (pad == null || index <= 0 || index >= MaxLocalPlayers) return null;
+
+            // The Start/South press also reached player 1 (it listens to unclaimed pads): no pause/jump this frame.
+            if (_host != null) _host.SuppressPresses();
+
+            Vector3 pos = FindSpawnPoint(firstDirection);
+            Quaternion rot = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+            GameObject elf = PlayerSetup.CreatePlayer(pos, themeIndex, index, pad);
+            elf.transform.rotation = rot;
+            StartCoroutine(PlaceAfterStart(elf, pos, rot));
+
+            RosterAdd(index, themeIndex, pad);
             return elf;
         }
 
@@ -145,7 +300,9 @@ namespace SilentNight.Player
             if (ctrl != null) ctrl.Teleport(pos, rot);
         }
 
-        private Vector3 FindSpawnPoint()
+        /// <param name="firstDirection">Which side to try first (0 right, 1 left, 2 behind, 3 front), so several
+        /// elves restored in the same frame do not all land on the same spot.</param>
+        private Vector3 FindSpawnPoint(int firstDirection = 0)
         {
             Transform t = transform;
             Vector3 origin = t.position + Vector3.up * 0.05f;
@@ -153,9 +310,10 @@ namespace SilentNight.Player
             int mask = BuildBlockMask();
             float r = PlayerSetup.ControllerRadius;
             float h = PlayerSetup.ControllerHeight;
-            for (int i = 0; i < dirs.Length; i++)
+            int start = ((firstDirection % dirs.Length) + dirs.Length) % dirs.Length;
+            for (int k = 0; k < dirs.Length; k++)
             {
-                Vector3 d = dirs[i];
+                Vector3 d = dirs[(start + k) % dirs.Length];
                 d.y = 0f;
                 if (d.sqrMagnitude < 1e-4f) continue;
                 d.Normalize();
@@ -197,14 +355,22 @@ namespace SilentNight.Player
                 if (e == null || e.PlayerIndex == 0 || e.AssignedGamepad != device) continue;
                 Leave(e);
             }
+            // Also forget a remembered friend whose elf is not in this scene (e.g. pad pulled during a load).
+            RosterRemoveDevice(device);
         }
 
-        /// <summary>Removes an extra elf (never player 1). Held item and sack contents are dropped where it stood.</summary>
+        /// <summary>
+        /// Removes an extra elf (never player 1) and forgets it in the roster. Held item and sack contents are dropped
+        /// where it stood.
+        /// </summary>
         public static void Leave(ElfInput elf)
         {
             if (elf == null || elf.PlayerIndex == 0) return;
             int index = elf.PlayerIndex;
             GameObject go = elf.gameObject;
+
+            RosterRemoveIndex(index);
+            RosterRemoveDevice(elf.AssignedGamepad);
 
             var carry = go.GetComponent<ElfCarry>();
             if (carry != null)

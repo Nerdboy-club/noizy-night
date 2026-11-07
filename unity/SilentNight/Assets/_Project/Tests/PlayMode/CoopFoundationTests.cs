@@ -272,6 +272,30 @@ namespace SilentNight.Tests
             Assert.IsTrue((bool)ragT.GetProperty("IsLimp").GetValue(p2.GetComponent(ragT)), "elf 2 falls");
             UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
         }
+        [UnityTest]
+        public IEnumerator Coop_FriendsFollowIntoTheNextScene()
+        {
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            joinT.GetMethod("ClearRoster").Invoke(null, null);
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/Hub.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(0.5f);
+            var pad = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>();
+            joinT.GetMethod("Join").Invoke(UnityEngine.Object.FindAnyObjectByType(joinT), new object[] { pad });
+            yield return new WaitForSeconds(0.5f);
+            Assert.AreEqual(1, (int)joinT.GetProperty("RosterCount").GetValue(null), "friend remembered");
+
+            op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/House.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(1f);
+            Type gs = Type.GetType("SilentNight.Core.GameServices, Assembly-CSharp", true);
+            var players = (System.Collections.ICollection)gs.GetProperty("Players").GetValue(null);
+            Assert.AreEqual(2, players.Count, "friend arrived in the house too");
+
+            UnityEngine.InputSystem.InputSystem.RemoveDevice(pad);
+            yield return null;
+            Assert.AreEqual(0, (int)joinT.GetProperty("RosterCount").GetValue(null), "unplugged friend forgotten");
+        }
     }
 }
 #endif
