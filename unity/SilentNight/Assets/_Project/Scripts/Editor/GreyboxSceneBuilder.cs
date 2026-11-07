@@ -595,6 +595,10 @@ namespace SilentNight.EditorTools
             WallAlongX(env, "Wall_Living_Kitchen", 0f, 0f, 12f, h, inner, wall, 3f);           // living ↔ kitchen
             WallAlongZ(env, "Wall_Hall_West", -3.5f, -11f, 11f, h, inner, wall, 7.5f, 2.25f, -5f); // → bedroom, study, garage
             WallAlongX(env, "Wall_Bedroom_Study", 4f, -12f, -3.5f, h, inner, wall);
+
+            // Creaky physical doors: push slowly = silent, normal = creak, slam = БАХ! (living room and Grandpa's bedroom).
+            SilentNight.Stealth.CreakyDoor.Create(env, new Vector3(0f, 0f, 3.3f), DoorW, DoorH, -90f, Mat(ProjectBootstrap.MatDarkWood));
+            SilentNight.Stealth.CreakyDoor.Create(env, new Vector3(-3.5f, 0f, 6.8f), DoorW, DoorH, -90f, Mat(ProjectBootstrap.MatDarkWood));
             WallAlongX(env, "Wall_Study_Garage", 0.5f, -12f, -3.5f, h, inner, wall);
 
             // ---- Living room (x 0..12, z 0..11): tree, fireplace (exit), gifts arrive here ----

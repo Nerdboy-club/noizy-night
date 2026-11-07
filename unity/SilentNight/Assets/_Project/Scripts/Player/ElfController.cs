@@ -90,6 +90,23 @@ namespace SilentNight.Player
         [SerializeField] private float bumpNoise = 45f;
         [SerializeField] private string bumpToast = "Бум! Эльф врезался в стену.";
 
+        [Header("Pushing loose bodies (doors, toys, loose gifts)")]
+        [SerializeField] private bool pushBodies = true;
+        [Tooltip("Continuous push while walking into a body: impulse per second per m/s of speed into it (N per m/s). " +
+                 "Heavier bodies accelerate less. Tuned so a crouch-push opens a CreakyDoor silently and a walk-push creaks.")]
+        [SerializeField] private float pushStrength = 4f;
+        [Tooltip("One-off impulse on first contact per m/s of approach speed above pushImpactFreeSpeed (N·s per m/s). " +
+                 "Sprinting into a door slams it.")]
+        [SerializeField] private float pushImpactStrength = 7f;
+        [Tooltip("Approach speed (m/s) below which first contact adds no extra impulse (crouch speed is 1.4).")]
+        [SerializeField] private float pushImpactFreeSpeed = 1.5f;
+        [Tooltip("Hard cap of a single push impulse (N·s).")]
+        [SerializeField] private float pushMaxImpulse = 20f;
+        [Tooltip("A push never makes the contact point faster than the elf's speed times this.")]
+        [SerializeField] private float pushMaxSpeedFactor = 1.2f;
+        [Tooltip("Contact with the same body within this time (s) counts as continuous (no new impact impulse).")]
+        [SerializeField] private float pushContactMemory = 0.25f;
+
         [Header("Huge gift (wrapped bike) clearance")]
         [Tooltip("The held bike's box is shrunk by this much on every side before the overlap test (lets it graze walls).")]
         [SerializeField] private float hugeClearanceSkin = 0.02f;
@@ -165,6 +182,12 @@ namespace SilentNight.Player
         private Vector3 _preMovePlanar;
         private float _bestBumpSpeed;
         private float _bumpCooldownTimer;
+
+        // pushing loose bodies (filled by OnControllerColliderHit during _cc.Move)
+        private Vector3 _pushWishVelocity;
+        private Rigidbody _pushedThisMove;
+        private Rigidbody _lastPushBody;
+        private float _lastPushTime = -10f;
 
         private readonly RaycastHit[] _hits = new RaycastHit[16];
 
@@ -453,6 +476,8 @@ namespace SilentNight.Player
 
             _preMovePlanar = _planarVelocity;
             _bestBumpSpeed = 0f;
+            _pushWishVelocity = targetVelocity;
+            _pushedThisMove = null;
             _collectHits = true;
             CollisionFlags flags = _cc.Move((_planarVelocity + Vector3.up * _verticalVelocity) * dt);
             _collectHits = false;
@@ -997,18 +1022,85 @@ namespace SilentNight.Player
 
         // ---------------- stumble ----------------
 
-        /// <summary>Called by the CharacterController during Move: remember the hardest wall impact of this move.</summary>
+        /// <summary>Called by the CharacterController during Move: push loose bodies we walk into and remember the
+        /// hardest wall impact of this move.</summary>
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
             if (!_collectHits || hit.collider == null || IsSelf(hit.collider)) return;
-            if (Mathf.Abs(hit.normal.y) > bumpMaxWallNormalY) return;               // floor / ceiling / slope
             Rigidbody body = hit.rigidbody;
-            if (body != null && !body.isKinematic && body.mass < bumpIgnoreRigidbodyMass) return; // loose light prop
+            if (pushBodies && body != null && !body.isKinematic) TryPushBody(hit, body);
+
+            if (Mathf.Abs(hit.normal.y) > bumpMaxWallNormalY) return;               // floor / ceiling / slope
+            if (body != null && !body.isKinematic
+                && (body.mass < bumpIgnoreRigidbodyMass || body.GetComponent<HingeJoint>() != null))
+                return; // loose light prop, or a hinged door that swings away (no faceplant)
 
             Vector3 n = new Vector3(hit.normal.x, 0f, hit.normal.z);
             if (n.sqrMagnitude < 0.0001f) return;
             float into = Vector3.Dot(_preMovePlanar, -n.normalized);
             if (into > _bestBumpSpeed) _bestBumpSpeed = into;
+        }
+
+        /// <summary>
+        /// Shove a non-kinematic body (door leaf, toy, loose gift) at the contact point along the planar move direction:
+        /// a continuous push from the wished speed plus a one-off impact impulse on first contact. Impulses (not velocity
+        /// changes) so heavier bodies move less; capped so the contact point never outruns the elf.
+        /// </summary>
+        private void TryPushBody(ControllerColliderHit hit, Rigidbody body)
+        {
+            if (body == _pushedThisMove) return;                      // several contacts with one body in one Move
+            if (hit.moveDirection.y < -0.3f) return;                  // standing on it, not walking into it
+            if (IsPuppetBody(body) || IsHeldBody(body)) return;
+
+            Vector3 dir = new Vector3(hit.moveDirection.x, 0f, hit.moveDirection.z);
+            if (dir.sqrMagnitude < 0.0001f) return;
+            dir.Normalize();
+
+            // Only the part of the move that goes into the surface pushes (sliding along a door leaf doesn't).
+            Vector3 n = new Vector3(hit.normal.x, 0f, hit.normal.z);
+            float facing = n.sqrMagnitude > 0.0001f ? Mathf.Clamp01(Vector3.Dot(dir, -n.normalized)) : 1f;
+            if (facing <= 0.01f) return;
+
+            float approach = Mathf.Max(0f, Vector3.Dot(_preMovePlanar, dir)) * facing;
+            float wish = Mathf.Max(approach, Mathf.Max(0f, Vector3.Dot(_pushWishVelocity, dir)) * facing);
+            if (wish <= 0.01f) return;
+
+            float pointSpeed = Vector3.Dot(body.GetPointVelocity(hit.point), dir);
+            float maxSpeed = wish * Mathf.Max(0.1f, pushMaxSpeedFactor);
+            if (pointSpeed >= maxSpeed) return;                        // already moving away faster than we push
+
+            float now = Time.time;
+            bool newContact = body != _lastPushBody || now - _lastPushTime > pushContactMemory;
+            _lastPushBody = body;
+            _lastPushTime = now;
+            _pushedThisMove = body;
+
+            float impulse = pushStrength * wish * Time.deltaTime;
+            if (newContact) impulse += pushImpactStrength * Mathf.Max(0f, approach - pushImpactFreeSpeed);
+            impulse = Mathf.Min(Mathf.Min(impulse, pushMaxImpulse), (maxSpeed - pointSpeed) * body.mass);
+            if (impulse <= 0f) return;
+
+            body.WakeUp();
+            body.AddForceAtPosition(dir * impulse, hit.point, ForceMode.Impulse);
+        }
+
+        /// <summary>Active-ragdoll limbs live on a separate root object named "ElfRagdoll" (see ElfRagdoll.Build).</summary>
+        private static bool IsPuppetBody(Rigidbody body)
+        {
+            Transform root = body.transform.root;
+            return root != null && root.name.StartsWith("ElfRagdoll", StringComparison.Ordinal);
+        }
+
+        private bool IsHeldBody(Rigidbody body)
+        {
+            if (_carry != null && _carry.IsHoldingSomething)
+            {
+                GameObject held = _carry.Held.GameObject;
+                if (held != null && (body.transform == held.transform || body.transform.IsChildOf(held.transform)))
+                    return true;
+            }
+            SilentNight.Gifts.Gift gift = body.GetComponentInParent<SilentNight.Gifts.Gift>();
+            return gift != null && gift.IsHeld;
         }
 
         private void TriggerBump(float speedIntoWall)

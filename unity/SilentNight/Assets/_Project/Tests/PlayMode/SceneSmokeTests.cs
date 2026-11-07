@@ -268,6 +268,24 @@ namespace SilentNight.Tests
             probe.position = new Vector3(-10.4f, 0f, 8f);
             Assert.IsTrue((bool)isHidden.Invoke(null, new object[] { probe, true }), "under Grandpa's bed hides");
         }
+        [UnityTest]
+        public IEnumerator House_DoorSlamIsLoudSlowPushIsSilent()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1f);
+            var doors = FindAll("SilentNight.Stealth.CreakyDoor");
+            Assert.GreaterOrEqual(doors.Length, 2, "doors placed");
+            object door = doors[0];
+            var t = door.GetType();
+            t.GetMethod("ResetNoise").Invoke(door, null);
+            t.GetMethod("SetAngularSpeed").Invoke(door, new object[] { 20f });
+            yield return new WaitForSeconds(0.4f);
+            Assert.Less((float)Get(door, "LastNoise"), 1f, "slow push is silent");
+            t.GetMethod("SetAngularSpeed").Invoke(door, new object[] { 260f });
+            yield return new WaitForSeconds(0.6f);
+            Debug.Log("[Smoke] door slam noise " + Get(door, "LastNoise"));
+            Assert.GreaterOrEqual((float)Get(door, "LastNoise"), 60f, "slam is loud");
+        }
     }
 }
 #endif
