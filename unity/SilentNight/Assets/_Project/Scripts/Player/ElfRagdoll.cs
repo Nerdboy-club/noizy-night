@@ -47,6 +47,12 @@ namespace SilentNight.Player
         [SerializeField] private float getUpDuration = 0.9f;
         [SerializeField] private Key ragdollDebugKey = Key.G;
 
+        [Header("Co-op: downed")]
+        [Tooltip("Co-op only (more than one player): how long a fallen elf stays down so friends can help it up.")]
+        [SerializeField] private float downedDuration = 4f;
+        [Tooltip("Upward velocity (m/s) of the little hop when a friend helps the elf up.")]
+        [SerializeField] private float helpHopSpeed = 2.2f;
+
         private enum Mode { Active, Limp, GettingUp }
 
         private sealed class Limb
@@ -105,7 +111,46 @@ namespace SilentNight.Player
         }
 
         public bool IsLimp => _mode != Mode.Active;
+        /// <summary>Lying on the ground (limp phase only, not while getting up).</summary>
+        public bool IsKnockedDown => _mode == Mode.Limp;
+        /// <summary>Limp in co-op mode: stays down for downedDuration and can be helped up by a friend (ElfHelpUp).</summary>
+        public bool IsDowned => _mode == Mode.Limp && _downed;
         public Transform PelvisTransform => _pelvis != null ? _pelvis.T : null;
+
+        private bool _downed;
+        private readonly System.Collections.Generic.List<Collider> _ignoreWithBody = new System.Collections.Generic.List<Collider>();
+
+        /// <summary>
+        /// A friend helps the elf up: skips the rest of the limp/downed time and jumps straight into the get-up phase
+        /// with a little upward hop. Returns false (and does nothing) unless the elf is lying limp.
+        /// </summary>
+        public bool HelpUp()
+        {
+            if (!_built || _mode != Mode.Limp) return false;
+            EnterGetUp();
+            _downed = false;
+            _wantLimp = false;
+            _hasPendingPush = false;
+            Vector3 hop = Vector3.up * helpHopSpeed;
+            foreach (Limb l in _limbs) l.Rb.linearVelocity = hop;
+            if (_pelvis != null) SilentNight.FX.LandingDust.Spawn(_pelvis.T.position, 0.5f);
+            return true;
+        }
+
+        /// <summary>Make the puppet's body never collide with <paramref name="c"/> (e.g. the help-up trigger).
+        /// Call again after re-enabling the collider: Unity resets IgnoreCollision when a collider is disabled.</summary>
+        public void IgnoreOwnBody(Collider c)
+        {
+            if (c == null) return;
+            if (!_ignoreWithBody.Contains(c)) _ignoreWithBody.Add(c);
+            if (!_built) return; // applied at the end of Build()
+            for (int i = 0; i < _limbs.Count; i++)
+            {
+                Collider a = _limbs[i].T.GetComponent<Collider>();
+                if (a != null) Physics.IgnoreCollision(a, c, true);
+            }
+            if (_cc != null && _cc != c) Physics.IgnoreCollision(_cc, c, true);
+        }
 
         // ---------------------------------------------------------------- lifecycle
 
@@ -116,6 +161,8 @@ namespace SilentNight.Player
             _visual = GetComponent<ElfVisual>();
             _cc = GetComponent<CharacterController>();
             Build();
+            // Co-op "help a fallen friend" target (PlayerSetup adds it; scenes baked earlier get it here).
+            if (GetComponent<ElfHelpUp>() == null) gameObject.AddComponent<ElfHelpUp>();
             if (_controller != null)
             {
                 _controller.Landed += OnLanded;
@@ -241,6 +288,8 @@ namespace SilentNight.Player
                 for (int j = i + 1; j < _limbs.Count; j++)
                     Physics.IgnoreCollision(a, _limbs[j].T.GetComponent<Collider>(), true);
                 if (_cc != null) Physics.IgnoreCollision(a, _cc, true);
+                for (int k = 0; k < _ignoreWithBody.Count; k++)
+                    if (_ignoreWithBody[k] != null) Physics.IgnoreCollision(a, _ignoreWithBody[k], true);
             }
 
             _totalMass = 0f;
@@ -561,7 +610,8 @@ namespace SilentNight.Player
                 case Mode.Limp:
                     _modeTimer += Time.deltaTime;
                     FollowPelvisWithRoot();
-                    if (_modeTimer >= limpDuration && _pelvis.Rb.linearVelocity.magnitude < 1.2f) EnterGetUp();
+                    float hold = _downed ? downedDuration : limpDuration; // co-op: stay down so friends can help
+                    if (_modeTimer >= hold && _pelvis.Rb.linearVelocity.magnitude < 1.2f) EnterGetUp();
                     break;
                 case Mode.GettingUp:
                     if (_wantLimp) { EnterLimp(); break; } // knocked down again while getting up
@@ -588,6 +638,7 @@ namespace SilentNight.Player
             _mode = Mode.Limp;
             _modeTimer = 0f;
             _strength = 0f;
+            _downed = GameServices.Players.Count > 1; // single-player keeps the short limpDuration
             if (_controller != null) _controller.InputLocked = true;
             if (_pelvis != null) SilentNight.FX.LandingDust.Spawn(_pelvis.T.position, 0.8f);
 
@@ -640,6 +691,7 @@ namespace SilentNight.Player
         {
             _mode = Mode.GettingUp;
             _modeTimer = 0f;
+            _downed = false;
             FollowPelvisWithRoot();
             // Face the direction the head points to (keeps the get-up natural).
             Vector3 fwd = Vector3.ProjectOnPlane(_pelvis.T.forward, Vector3.up);

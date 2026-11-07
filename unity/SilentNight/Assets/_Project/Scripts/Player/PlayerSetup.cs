@@ -64,6 +64,8 @@ namespace SilentNight.Player
             }
 
             SetLayerRecursive(go.transform, go.layer);
+            // After the layer pass: ElfHelpUp builds its own trigger child on the Interactable layer (in Start).
+            go.AddComponent<ElfHelpUp>(); // co-op: a friend can help this elf up when it is downed
             return go;
         }
 
