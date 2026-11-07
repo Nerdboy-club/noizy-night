@@ -24,6 +24,9 @@ namespace SilentNight.Player
         public Vector2 Move { get; private set; }
         /// <summary>Test/automation hook: when set, replaces the WASD/stick value.</summary>
         public static Vector2? DebugMoveOverride;
+        /// <summary>Test/automation hook (one-shot): when set true, JumpPressed reads true for the next sampled
+        /// frame and the flag resets itself.</summary>
+        public static bool DebugJumpOverride;
         /// <summary>Combined look this frame in mouse-pixel units (mouse delta + scaled right stick).</summary>
         public Vector2 Look { get; private set; }
         /// <summary>Raw mouse delta this frame (pixels).</summary>
@@ -167,6 +170,11 @@ namespace SilentNight.Player
             InteractHeld = _interact.IsPressed();
 
             JumpPressed = _jump.WasPressedThisFrame();
+            if (DebugJumpOverride)
+            {
+                JumpPressed = true;
+                DebugJumpOverride = false;
+            }
             CrouchPressed = _crouch.WasPressedThisFrame();
             InteractPressed = _interact.WasPressedThisFrame();
             SackPressed = _sack.WasPressedThisFrame();

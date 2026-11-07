@@ -100,6 +100,32 @@ namespace SilentNight.Player
         [SerializeField] private float hugeStuckToastCooldown = 4f;
         [SerializeField] private string hugeStuckToast = "Велосипед застрял в проёме! Разверните его боком.";
 
+        [Header("Ledge grab & mantle")]
+        [SerializeField] private bool ledgeGrabEnabled = true;
+        [Tooltip("Ledge top height above the feet (m) accepted for a mantle. Below: stepOffset / jump. Above: out of reach.")]
+        [SerializeField] private float ledgeMinHeight = 0.35f;
+        [SerializeField] private float ledgeMaxHeight = 1.0f;
+        [Tooltip("Forward capsule cast distance beyond the controller radius (m).")]
+        [SerializeField] private float ledgeReach = 0.3f;
+        [Tooltip("Wall faces with |normal.y| above this are not climbable faces.")]
+        [SerializeField] private float ledgeMaxWallNormalY = 0.35f;
+        [Tooltip("The ledge top must be walkable: normal.y above this.")]
+        [SerializeField] private float ledgeMinTopNormalY = 0.7f;
+        [Tooltip("Wish direction must face into the wall at least this much (dot).")]
+        [SerializeField] private float ledgeMinFacingDot = 0.5f;
+        [Tooltip("How far past the wall face (in addition to the radius) the elf ends up standing (m).")]
+        [SerializeField] private float ledgeInset = 0.06f;
+        [Tooltip("No grab when falling faster than this (m/s).")]
+        [SerializeField] private float ledgeMaxFallSpeed = 6f;
+        [SerializeField] private float mantleDuration = 0.45f;
+        [Tooltip("Fraction of the mantle spent rising before the forward part starts to dominate.")]
+        [SerializeField] private float mantleUpFraction = 0.6f;
+        [Tooltip("Feet end this far above the ledge top (must exceed the controller skin width).")]
+        [SerializeField] private float mantleClearance = 0.04f;
+        [SerializeField] private float mantleExitSpeed = 0.6f;
+        [SerializeField] private float mantleNoise = 20f;
+        [SerializeField] private float mantleCooldown = 0.3f;
+
         [Header("Misc")]
         [Tooltip("Pause key toggles GameServices.Flow.TogglePause().")]
         [SerializeField] private bool handlePauseInput = true;
@@ -153,6 +179,18 @@ namespace SilentNight.Player
         private float _hugeScrapeTimer;
         private float _hugeToastTimer;
 
+        // ledge grab / mantle
+        private int _ledgeMask = ~0;
+        private readonly RaycastHit[] _ledgeHits = new RaycastHit[16];      // forward wall cast
+        private readonly RaycastHit[] _ledgeProbeHits = new RaycastHit[16]; // top / rise probes (used inside the wall loop)
+        private readonly Collider[] _ledgeOverlap = new Collider[16];
+        private bool _mantling;
+        private float _mantleTimer;
+        private float _mantleCooldownTimer;
+        private Vector3 _mantleStart;
+        private Vector3 _mantleEnd;
+        private Vector3 _mantleDir;
+
         // ---------------- events (for animator / visuals / audio inside the Player module) ----------------
         public event Action Jumped;
         /// <summary>Arg: fall speed at impact (m/s).</summary>
@@ -162,8 +200,14 @@ namespace SilentNight.Player
         public event Action<float> Footstep;
         /// <summary>Elf sprinted face-first into a wall/obstacle. Arg: speed into the wall (m/s). ElfRagdoll goes limp.</summary>
         public event Action<float> Bumped;
+        /// <summary>The elf grabbed a ledge and started clambering up (normal movement is suspended).</summary>
+        public event Action MantleStarted;
+        /// <summary>The elf finished clambering onto a ledge.</summary>
+        public event Action Mantled;
 
         // ---------------- public read API ----------------
+        /// <summary>True while the elf is clambering up onto a ledge (~mantleDuration seconds).</summary>
+        public bool IsMantling => _mantling;
         /// <summary>Set by ElfRagdoll while the elf is limp: ignores movement input.</summary>
         public bool InputLocked { get; set; }
         public Vector3 Velocity => _planarVelocity + Vector3.up * _verticalVelocity;
@@ -211,6 +255,7 @@ namespace SilentNight.Player
             ExcludeLayer(ref _hugeMask, GameConstants.LayerPlayer);
             ExcludeLayer(ref _hugeMask, GameConstants.LayerGift);
             ExcludeLayer(ref _hugeMask, GameConstants.LayerNPC);
+            _ledgeMask = _hugeMask; // same exclusions: player, gifts, NPCs, Ignore Raycast
         }
 
         private static void ExcludeLayer(ref int mask, string layerName)
@@ -270,6 +315,7 @@ namespace SilentNight.Player
             _coyoteTimer = 0f;
             _jumpBufferTimer = 0f;
             _grounded = false;
+            _mantling = false;
             if (notify) Teleported?.Invoke();
         }
 
@@ -286,6 +332,14 @@ namespace SilentNight.Player
             float dt = Time.deltaTime;
             if (dt <= 0f || !_cc.enabled) return; // paused (timeScale 0) or controller disabled
             CacheSiblings();
+
+            if (_mantleCooldownTimer > 0f) _mantleCooldownTimer -= dt;
+            if (_mantling)
+            {
+                UpdateMantle(dt);
+                UpdateNoiseLevel(dt);
+                return;
+            }
 
             bool canControl = PlayerGate.CanControl && !InputLocked;
             Vector2 moveInput = canControl ? _input.Move : Vector2.zero;
@@ -338,6 +392,18 @@ namespace SilentNight.Player
                 jumpedThisFrame = true;
                 RaiseNoise(GameConstants.NoiseWalk * SurfaceNoiseMultiplier() * BootsNoiseFactor, NoiseSource.Footstep);
                 Jumped?.Invoke();
+            }
+
+            // ---- ledge grab (airborne / just jumped, pushing toward a wall with a reachable top) ----
+            if (ledgeGrabEnabled && canControl && wantsMove && !_grounded && !_crouching
+                && _mantleCooldownTimer <= 0f && _verticalVelocity > -ledgeMaxFallSpeed
+                && !(_carry != null && _carry.IsCarryingHuge)
+                && TryFindLedge(new Vector3(wishDir.x, 0f, wishDir.z).normalized, out Vector3 ledgeStand, out Vector3 ledgeDir))
+            {
+                BeginMantle(ledgeStand, ledgeDir);
+                UpdateMantle(dt);
+                UpdateNoiseLevel(dt);
+                return;
             }
 
             // ---- jetpack ----
@@ -541,6 +607,173 @@ namespace SilentNight.Player
                 _hugeToastTimer = hugeStuckToastCooldown;
                 GameEvents.RaiseToast(hugeStuckToast);
             }
+        }
+
+        // ---------------- ledge grab & mantle ----------------
+
+        /// <summary>Loose light dynamic bodies (toys, ragdoll limbs) are never walls, ledges or ceilings.</summary>
+        private bool IsLooseLight(Collider c)
+        {
+            Rigidbody body = c.attachedRigidbody;
+            return body != null && !body.isKinematic && body.mass < bumpIgnoreRigidbodyMass;
+        }
+
+        private bool IsLedgeBlocker(Collider c) => c != null && !c.isTrigger && !IsSelf(c) && !IsLooseLight(c);
+
+        /// <summary>
+        /// Forward capsule cast (knee to chest) along dir finds a near-vertical face we are pushing into; then a
+        /// downward ray just past that face must find a walkable top between ledgeMinHeight and ledgeMaxHeight above
+        /// the feet, with room for the standing capsule there and room to rise straight up from here.
+        /// </summary>
+        private bool TryFindLedge(Vector3 dir, out Vector3 standPos, out Vector3 mantleDir)
+        {
+            standPos = Vector3.zero;
+            mantleDir = Vector3.zero;
+            if (dir.sqrMagnitude < 0.5f) return false;
+
+            Vector3 feet = transform.position;
+            float r = _cc.radius;
+            float castR = r * 0.85f;
+            float bottom = castR + 0.1f;
+            float top = Mathf.Max(bottom, _cc.height - castR);
+            Vector3 p1 = feet + Vector3.up * bottom;
+            Vector3 p2 = feet + Vector3.up * top;
+            float dist = ledgeReach + (r - castR) + _cc.skinWidth;
+
+            int n = Physics.CapsuleCastNonAlloc(p1, p2, castR, dir, _ledgeHits, dist, _ledgeMask, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit hit = _ledgeHits[i];
+                if (!IsLedgeBlocker(hit.collider)) continue;
+                if (hit.distance <= 0f || hit.distance >= best) continue; // initial overlaps report distance 0
+                if (Mathf.Abs(hit.normal.y) > ledgeMaxWallNormalY) continue;
+                Vector3 wn = new Vector3(hit.normal.x, 0f, hit.normal.z);
+                if (wn.sqrMagnitude < 0.0001f) continue;
+                Vector3 into = -wn.normalized;
+                if (Vector3.Dot(into, dir) < ledgeMinFacingDot) continue;
+                if (!ProbeLedgeTop(hit.point, into, feet, out Vector3 stand)) continue;
+
+                best = hit.distance;
+                standPos = stand;
+                mantleDir = into;
+                found = true;
+            }
+            return found;
+        }
+
+        private bool ProbeLedgeTop(Vector3 facePoint, Vector3 into, Vector3 feet, out Vector3 stand)
+        {
+            stand = Vector3.zero;
+            float r = _cc.radius;
+            Vector3 probe = new Vector3(facePoint.x, feet.y, facePoint.z) + into * (r + ledgeInset);
+            float startY = feet.y + ledgeMaxHeight + 0.1f;
+            Vector3 origin = new Vector3(probe.x, startY, probe.z);
+
+            // Ray starting inside the obstacle = it is taller than ledgeMaxHeight.
+            if (Physics.CheckSphere(origin, 0.02f, _ledgeMask, QueryTriggerInteraction.Ignore)) return false;
+
+            float len = startY - (feet.y + ledgeMinHeight) + 0.02f;
+            int n = Physics.RaycastNonAlloc(origin, Vector3.down, _ledgeProbeHits, len, _ledgeMask, QueryTriggerInteraction.Ignore);
+            bool hitTop = false;
+            RaycastHit topHit = default;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                RaycastHit h = _ledgeProbeHits[i];
+                if (!IsLedgeBlocker(h.collider)) continue;
+                if (h.distance < bestDist) { bestDist = h.distance; topHit = h; hitTop = true; }
+            }
+            if (!hitTop) return false;
+            if (topHit.normal.y < ledgeMinTopNormalY) return false;
+
+            float height = topHit.point.y - feet.y;
+            if (height < ledgeMinHeight || height > ledgeMaxHeight) return false;
+            if (topHit.point.y < facePoint.y - 0.05f) return false; // found something lower beyond the face, not its top
+
+            stand = new Vector3(probe.x, topHit.point.y + mantleClearance, probe.z);
+            if (StandingCapsuleBlocked(stand)) return false;
+
+            // Room to rise straight up from where we are now.
+            float rise = stand.y - feet.y;
+            Vector3 head = feet + Vector3.up * (_cc.height - r);
+            int m = Physics.SphereCastNonAlloc(head, r * 0.85f, Vector3.up, _ledgeProbeHits, rise + 0.02f, _ledgeMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < m; i++)
+                if (IsLedgeBlocker(_ledgeProbeHits[i].collider)) return false;
+            return true;
+        }
+
+        private bool StandingCapsuleBlocked(Vector3 feet)
+        {
+            float r = _cc.radius * 0.95f;
+            Vector3 p1 = feet + Vector3.up * (r + 0.01f);
+            Vector3 p2 = feet + Vector3.up * Mathf.Max(r + 0.01f, standHeight - r);
+            int n = Physics.OverlapCapsuleNonAlloc(p1, p2, r, _ledgeOverlap, _ledgeMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+                if (IsLedgeBlocker(_ledgeOverlap[i])) return true;
+            return false;
+        }
+
+        private void BeginMantle(Vector3 standPos, Vector3 dir)
+        {
+            _mantling = true;
+            _mantleTimer = 0f;
+            _mantleStart = transform.position;
+            _mantleEnd = standPos;
+            _mantleDir = dir;
+            _jetpacking = false;
+            _sprinting = false;
+            _planarVelocity = Vector3.zero;
+            _verticalVelocity = 0f;
+            _peakFallSpeed = 0f;
+            _jumpBufferTimer = 0f;
+            _coyoteTimer = 0f;
+            _grounded = false;
+            RaiseNoise(mantleNoise, NoiseSource.Landing);
+            MantleStarted?.Invoke();
+        }
+
+        /// <summary>Scripted clamber: rise first, then slide forward onto the ledge (CharacterController.Move each frame
+        /// toward the point on the arc, so geometry still blocks it).</summary>
+        private void UpdateMantle(float dt)
+        {
+            if (InputLocked) { EndMantle(false); return; } // knocked limp mid-climb
+
+            _mantleTimer += dt;
+            float t = Mathf.Clamp01(_mantleTimer / Mathf.Max(0.05f, mantleDuration));
+            float upFrac = Mathf.Clamp(mantleUpFraction, 0.1f, 0.95f);
+            float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / upFrac));
+            float fStart = upFrac * 0.7f;
+            float f = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - fStart) / (1f - fStart)));
+
+            Vector3 desired = new Vector3(
+                Mathf.Lerp(_mantleStart.x, _mantleEnd.x, f),
+                Mathf.Lerp(_mantleStart.y, _mantleEnd.y, u),
+                Mathf.Lerp(_mantleStart.z, _mantleEnd.z, f));
+            Vector3 delta = desired - transform.position;
+            if (delta.sqrMagnitude > 1e-8f) _cc.Move(delta);
+
+            if (_mantleDir.sqrMagnitude > 0.0001f)
+            {
+                Quaternion want = Quaternion.LookRotation(_mantleDir, Vector3.up);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, want, turnSpeedDegrees * dt);
+            }
+
+            if (t >= 1f) EndMantle(true);
+        }
+
+        private void EndMantle(bool completed)
+        {
+            _mantling = false;
+            _mantleCooldownTimer = mantleCooldown;
+            _verticalVelocity = 0f;
+            _peakFallSpeed = 0f;
+            _jumpBufferTimer = 0f;
+            _coyoteTimer = 0f;
+            _planarVelocity = completed ? _mantleDir * mantleExitSpeed : Vector3.zero;
+            _grounded = ProbeGround() || _cc.isGrounded;
+            if (completed) Mantled?.Invoke();
         }
 
         // ---------------- stamina ----------------

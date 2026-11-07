@@ -225,6 +225,33 @@ namespace SilentNight.Tests
             Assert.Greater(p.x, 5.2f, "walked over the ramp onto the next roof");
             Assert.Greater(p.y, 0.3f, "stands on the higher roof");
         }
+        [UnityTest]
+        public IEnumerator House_ElfClimbsOntoKitchenCounter()
+        {
+            yield return Load("House");
+            yield return new WaitForSeconds(1.5f);
+            Component ctrl = Find("SilentNight.Player.ElfController");
+            Component rig = Find("SilentNight.Player.ThirdPersonCameraRig");
+            var yaw = rig.GetType().GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            ctrl.GetType().GetMethod("Teleport").Invoke(ctrl, new object[] { new Vector3(6.5f, 0.02f, -9.6f), Quaternion.Euler(0f, 180f, 0f), true });
+            yield return new WaitForSeconds(0.3f);
+            SetMove(new Vector2(0f, 1f));
+            float t = 0f;
+            bool jumped = false, mantled = false;
+            while (t < 2f)
+            {
+                yaw.SetValue(rig, 180f);
+                if (!jumped && t > 0.2f) { T("SilentNight.Player.ElfInput").GetField("DebugJumpOverride").SetValue(null, true); jumped = true; }
+                if ((bool)Get(ctrl, "IsMantling")) mantled = true;
+                t += Time.deltaTime;
+                yield return null;
+            }
+            SetMove(null);
+            Vector3 p = ctrl.transform.position;
+            Debug.Log("[Smoke] after mantle: " + p);
+            Assert.IsTrue(mantled, "elf grabbed the counter edge");
+            Assert.Greater(p.y, 0.85f, "elf is standing on the counter");
+        }
     }
 }
 #endif

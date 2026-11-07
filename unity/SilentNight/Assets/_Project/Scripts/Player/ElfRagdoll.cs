@@ -38,6 +38,7 @@ namespace SilentNight.Player
         [Header("Gait")]
         private float strideRadPerMeter = 8f; // not serialized: scenes built earlier must not keep old values
         private float maxSwingDegrees = 55f;
+        private float mantleScrambleRate = 24f; // rad/s of the leg/arm scramble while clambering onto a ledge
 
         [Header("Falling")]
         [Tooltip("Landing speed (m/s) above which the elf goes limp.")]
@@ -701,6 +702,16 @@ namespace SilentNight.Player
                 hipL -= 50f; hipR -= 50f; kneeL += 85f; kneeR += 85f;
             }
 
+            // Ledge mantle: knees up and kicking (alternating scramble), torso hunched over the edge.
+            bool mantling = _controller.IsMantling;
+            float scramble = mantling ? Mathf.Sin(Time.time * mantleScrambleRate) : 0f;
+            if (mantling)
+            {
+                hipL = -65f + 22f * scramble; hipR = -65f - 22f * scramble;
+                kneeL = 95f - 15f * scramble; kneeR = 95f + 15f * scramble;
+                lean = 35f;
+            }
+
             Drive(_uLegL, hipL);
             Drive(_uLegR, hipR);
             Drive(_lLegL, kneeL);
@@ -708,7 +719,13 @@ namespace SilentNight.Player
             Drive(_torso, lean * 0.6f);
             Drive(_head, -lean * 0.5f);
 
-            if (carrying)
+            if (mantling && !carrying)
+            {
+                // Both arms reaching up/forward onto the ledge, pawing a little out of phase.
+                Drive(_uArmL, -150f + 12f * scramble); Drive(_uArmR, -150f - 12f * scramble);
+                Drive(_lArmL, -35f); Drive(_lArmR, -35f);
+            }
+            else if (carrying)
             {
                 Drive(_uArmL, -75f); Drive(_uArmR, -75f);
                 Drive(_lArmL, -50f); Drive(_lArmR, -50f);
