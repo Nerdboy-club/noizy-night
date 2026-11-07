@@ -16,7 +16,7 @@ namespace SilentNight.Player
         [SerializeField] private float stickLookPixelsPerSecond = 1200f;
 
         private InputAction _move, _lookMouse, _lookStick, _jump, _sprint, _crouch, _interact,
-                            _sack, _jetpack, _cameraToggle, _pause, _zoom;
+                            _sack, _jetpack, _cameraToggle, _pause, _zoom, _catnip;
         private bool _created;
 
         // ---------- continuous values ----------
@@ -47,6 +47,8 @@ namespace SilentNight.Player
         public bool CameraTogglePressed { get; private set; }
         public bool PausePressed { get; private set; }
         public bool SprintPressed { get; private set; }
+        /// <summary>[F] / gamepad left shoulder: throw a catnip pouch.</summary>
+        public bool CatnipPressed { get; private set; }
 
         private void Awake() => CreateActions();
 
@@ -96,6 +98,9 @@ namespace SilentNight.Player
             _pause.AddBinding("<Gamepad>/start");
 
             _zoom = new InputAction("Zoom", InputActionType.Value, "<Mouse>/scroll/y", expectedControlType: "Axis");
+
+            _catnip = new InputAction("Catnip", InputActionType.Button, "<Keyboard>/f");
+            _catnip.AddBinding("<Gamepad>/leftShoulder");
         }
 
         private void OnEnable()
@@ -117,7 +122,7 @@ namespace SilentNight.Player
             if (!_created) return;
             _move.Dispose(); _lookMouse.Dispose(); _lookStick.Dispose(); _jump.Dispose(); _sprint.Dispose();
             _crouch.Dispose(); _interact.Dispose(); _sack.Dispose(); _jetpack.Dispose(); _cameraToggle.Dispose();
-            _pause.Dispose(); _zoom.Dispose();
+            _pause.Dispose(); _zoom.Dispose(); _catnip.Dispose();
             _created = false;
         }
 
@@ -128,13 +133,13 @@ namespace SilentNight.Player
             {
                 _move.Enable(); _lookMouse.Enable(); _lookStick.Enable(); _jump.Enable(); _sprint.Enable();
                 _crouch.Enable(); _interact.Enable(); _sack.Enable(); _jetpack.Enable(); _cameraToggle.Enable();
-                _pause.Enable(); _zoom.Enable();
+                _pause.Enable(); _zoom.Enable(); _catnip.Enable();
             }
             else
             {
                 _move.Disable(); _lookMouse.Disable(); _lookStick.Disable(); _jump.Disable(); _sprint.Disable();
                 _crouch.Disable(); _interact.Disable(); _sack.Disable(); _jetpack.Disable(); _cameraToggle.Disable();
-                _pause.Disable(); _zoom.Disable();
+                _pause.Disable(); _zoom.Disable(); _catnip.Disable();
             }
         }
 
@@ -143,7 +148,7 @@ namespace SilentNight.Player
             Look = LookMouse = LookStick = Vector2.zero;
             Zoom = 0f;
             JumpPressed = CrouchPressed = InteractPressed = SackPressed = JetpackPressed =
-                CameraTogglePressed = PausePressed = SprintPressed = false;
+                CameraTogglePressed = PausePressed = SprintPressed = CatnipPressed = false;
         }
 
         private void Update()
@@ -169,6 +174,7 @@ namespace SilentNight.Player
             CameraTogglePressed = _cameraToggle.WasPressedThisFrame();
             PausePressed = _pause.WasPressedThisFrame();
             SprintPressed = _sprint.WasPressedThisFrame();
+            CatnipPressed = _catnip.WasPressedThisFrame();
         }
     }
 }

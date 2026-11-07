@@ -35,7 +35,8 @@ namespace SilentNight.Core
     /// <summary>Floor material under the elf. Drives footstep noise and slipperiness.</summary>
     public enum SurfaceType { Default, Carpet, Wood, CreakyWood, Tile, Ice }
 
-    public enum UpgradeType { Jetpack, SilentBoots, Sack, Grip }
+    /// <summary>Workbench entries. Catnip is a consumable (pouch count, max PlayerProfile.MaxCatnip), not a level. Append only.</summary>
+    public enum UpgradeType { Jetpack, SilentBoots, Sack, Grip, Catnip }
 
     /// <summary>Grandpa awareness level, broadcast via GameEvents.GrandpaAlertChanged.</summary>
     public enum AlertLevel { Asleep, Stirring, Suspicious, Searching, Chasing }

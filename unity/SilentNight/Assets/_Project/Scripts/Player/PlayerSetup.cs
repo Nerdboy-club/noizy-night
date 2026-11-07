@@ -40,6 +40,7 @@ namespace SilentNight.Player
             go.AddComponent<ElfController>();
             go.AddComponent<ElfAnimator>();
             go.AddComponent<ElfRagdoll>();
+            go.AddComponent<CatnipThrower>(); // [F] / LB: throw catnip (after ElfInput + ElfRagdoll, which it caches in Awake)
             go.AddComponent<ThirdPersonCameraRig>();
 
             SetLayerRecursive(go.transform, go.layer);

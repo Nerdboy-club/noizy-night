@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 using SilentNight.Core;
+using SilentNight.Player;
 
 namespace SilentNight.Stealth
 {
@@ -11,12 +12,14 @@ namespace SilentNight.Stealth
     /// - A loud enough noise wakes it: it turns, walks over to the source, sniffs around for a few seconds, then goes back.
     /// - A standing elf stepping near its rear = tail stepped on: loud yowl (NoiseSource.Cat → wakes Grandpa), toast, bolt.
     /// - While awake and near an elf it meows now and then (quiet, comedic tension).
+    /// - Catnip (Player/CatnipThrower): a free pouch within catnipNoticeRadius makes it walk over and roll/purr there for
+    ///   catnipDuration s. Meanwhile it ignores all noises, never meows/yowls and its tail is safe. Then the pouch is consumed.
     /// Without a NavMesh it never walks (would clip through walls): it only turns in place and snaps back to its bed.
     /// </summary>
     [DisallowMultipleComponent]
     public class FatCat : MonoBehaviour
     {
-        private enum CatState { Sleeping, Waking, Walking, Lingering, Investigating, Sniffing, Fleeing, Glaring, Returning }
+        private enum CatState { Sleeping, Waking, Walking, Lingering, Investigating, Sniffing, Fleeing, Glaring, Returning, CatnipApproach, CatnipPurr }
         private enum WakeReason { Idle, Elf, Noise }
         private enum TripKind { Random, Bowl, Bed }
 
@@ -90,6 +93,20 @@ namespace SilentNight.Stealth
         [Range(0f, 1f)] [SerializeField] private float meowToastChance = 0.3f;
         [SerializeField] private bool showToasts = true;
 
+        [Header("Catnip")]
+        [Tooltip("A free catnip pouch this close (horizontal) attracts the cat, even out of a nap.")]
+        [SerializeField] private float catnipNoticeRadius = 6f;
+        [SerializeField] private float catnipScanInterval = 0.4f;
+        [SerializeField] private float catnipApproachSpeed = 1.0f;
+        [Tooltip("Stops this far from the pouch.")]
+        [SerializeField] private float catnipStopDistance = 0.25f;
+        [SerializeField] private float catnipApproachTimeout = 10f;
+        [Tooltip("Purring blissfully next to the pouch: ignores noise, never yowls.")]
+        [SerializeField] private float catnipDuration = 20f;
+        [Tooltip("Quiet purr noise (0 = silent).")]
+        [SerializeField] private float purrLoudness = 15f;
+        [SerializeField] private float purrInterval = 4f;
+
         [Header("Movement")]
         [SerializeField] private float returnTimeout = 15f;
         [SerializeField] private float turnSpeed = 300f;
@@ -99,6 +116,15 @@ namespace SilentNight.Stealth
         [SerializeField] private bool drawGizmos = true;
 
         public bool IsSleeping => _state == CatState.Sleeping;
+        /// <summary>True while the cat is going for / purring at catnip (deaf to noise, tail safe).</summary>
+        public bool IsOnCatnip => IsCatnipState;
+        private bool IsCatnipState => _state == CatState.CatnipApproach || _state == CatState.CatnipPurr;
+
+        private CatnipPouch _catnip;
+        private Vector3 _catnipTargetPos;
+        private float _catnipScanTimer;
+        private float _catnipRetarget;
+        private float _purrNoiseTimer;
 
         private NavMover _mover;
         private CatState _state = CatState.Sleeping;
@@ -144,7 +170,11 @@ namespace SilentNight.Stealth
         }
 
         private void OnEnable() => GameEvents.Noise += OnNoise;
-        private void OnDisable() => GameEvents.Noise -= OnNoise;
+        private void OnDisable()
+        {
+            GameEvents.Noise -= OnNoise;
+            ReleaseCatnip(); // let another cat have it; state machine bails out of catnip on re-enable
+        }
 
         private void Start()
         {
@@ -216,6 +246,7 @@ namespace SilentNight.Stealth
         private void OnNoise(NoiseEvent e)
         {
             if (!_initialized) return;
+            if (IsCatnipState) return; // blissed out: hears nothing
             if (e.Source == NoiseSource.Cat || (e.Emitter != null && e.Emitter == gameObject)) return;
             if (!StealthUtil.IsGameplayActive) return;
             float heard = e.LoudnessAt(transform.position + Vector3.up * 0.3f);
@@ -244,6 +275,16 @@ namespace SilentNight.Stealth
             if (_tailTimer > 0f) _tailTimer -= dt;
 
             GatherElves(dt);
+
+            // Catnip overrides everything (checked before the tail: stepping on it is safe while purring).
+            if (IsCatnipState)
+            {
+                _pendingNoise = false;
+                TickCatnip(dt);
+                UpdateVisual();
+                return;
+            }
+            if (TryNoticeCatnip(dt)) { UpdateVisual(); return; }
 
             if (CheckTail()) { UpdateVisual(); return; }
             HandlePendingNoise();
@@ -458,6 +499,130 @@ namespace SilentNight.Stealth
             StartReturn();
         }
 
+        // ---------------- catnip ----------------
+
+        private bool TryNoticeCatnip(float dt)
+        {
+            _catnipScanTimer -= dt;
+            if (_catnipScanTimer > 0f) return false;
+            _catnipScanTimer = catnipScanInterval;
+            if (_state == CatState.Fleeing) return false; // too busy running
+            if (!CatnipThrower.TryFindFree(transform.position, catnipNoticeRadius, out CatnipPouch pouch)) return false;
+
+            pouch.Claimer = this;
+            _catnip = pouch;
+            _pendingNoise = false;
+            _hasLookTarget = false;
+            if (showToasts) GameEvents.RaiseToast("Кот учуял кошачью мяту...");
+            StartCatnipApproach();
+            return true;
+        }
+
+        private void StartCatnipApproach()
+        {
+            RestoreAcceleration();
+            EnsureAgent();
+            SetState(CatState.CatnipApproach);
+            _catnipRetarget = 0.5f;
+            _catnipTargetPos = _catnip.Position;
+            if (_mover.AgentReady && TryCatnipGoal(_catnipTargetPos, out Vector3 goal)) _mover.SetTarget(goal, catnipApproachSpeed);
+            else _mover.Stop();
+        }
+
+        /// <summary>NavMesh point right next to the pouch, on the cat's side.</summary>
+        private bool TryCatnipGoal(Vector3 pouchPos, out Vector3 goal)
+        {
+            Vector3 toCat = transform.position - pouchPos;
+            toCat.y = 0f;
+            Vector3 p = pouchPos;
+            if (toCat.sqrMagnitude > catnipStopDistance * catnipStopDistance) p = pouchPos + toCat.normalized * catnipStopDistance;
+            return NavMover.Sample(p, 1f, out goal);
+        }
+
+        private void TickCatnip(float dt)
+        {
+            if (_catnip == null || !_catnip.Alive) { EndCatnip(false); return; }
+            Vector3 pouchPos = _catnip.Position;
+
+            if (_state == CatState.CatnipApproach)
+            {
+                bool arrived;
+                if (_mover.AgentReady)
+                {
+                    // The pouch may still be rolling: follow it.
+                    _catnipRetarget -= dt;
+                    if (_catnipRetarget <= 0f)
+                    {
+                        _catnipRetarget = 0.5f;
+                        if (StealthUtil.HorizontalDistance(pouchPos, _catnipTargetPos) > 0.3f && TryCatnipGoal(pouchPos, out Vector3 goal))
+                        {
+                            _catnipTargetPos = pouchPos;
+                            _mover.UpdateTarget(goal, catnipApproachSpeed);
+                        }
+                    }
+                    arrived = _mover.Tick(dt) ||
+                              StealthUtil.HorizontalDistance(transform.position, pouchPos) <= catnipStopDistance + 0.15f;
+                }
+                else
+                {
+                    // No NavMesh: cannot walk, so it just turns towards the smell and melts on the spot.
+                    _mover.FaceTowards(pouchPos, dt, 0.8f);
+                    arrived = _timer > 0.8f;
+                }
+                if (arrived || _timer >= catnipApproachTimeout) StartPurr();
+                return;
+            }
+
+            // CatnipPurr: lazily rolling around next to the pouch.
+            Vector3 dir = pouchPos - transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.01f) dir = transform.forward;
+            dir = Quaternion.Euler(0f, Mathf.Sin(_timer * 1.2f) * 40f, 0f) * dir;
+            _mover.FaceDirection(dir, dt, 0.25f);
+
+            if (purrLoudness > 0f)
+            {
+                _purrNoiseTimer -= dt;
+                if (_purrNoiseTimer <= 0f)
+                {
+                    _purrNoiseTimer = purrInterval;
+                    GameEvents.RaiseNoise(new NoiseEvent(transform.position + Vector3.up * 0.3f, purrLoudness, NoiseSource.Cat, gameObject));
+                }
+            }
+
+            if (_timer >= catnipDuration) EndCatnip(true);
+        }
+
+        private void StartPurr()
+        {
+            _mover.Stop();
+            SetState(CatState.CatnipPurr);
+            _purrNoiseTimer = 1f;
+            if (showToasts) GameEvents.RaiseToast("Кот нашёл мяту и блаженно мурлычет. Мррр...");
+        }
+
+        private void EndCatnip(bool finished)
+        {
+            CatnipPouch pouch = _catnip;
+            _catnip = null;
+            if (pouch != null)
+            {
+                if (finished) CatnipThrower.Consume(pouch);
+                else if (pouch.Claimer == this) pouch.Claimer = null;
+            }
+            if (finished && showToasts) GameEvents.RaiseToast("Мята выветрилась. Кот вернулся к своим делам.");
+            _pendingNoise = false;
+            _meowTimer = Random.Range(meowCooldownMin, meowCooldownMax);
+            _catnipScanTimer = catnipScanInterval;
+            StartReturn();
+        }
+
+        private void ReleaseCatnip()
+        {
+            if (_catnip != null && _catnip.Claimer == this) _catnip.Claimer = null;
+            _catnip = null;
+        }
+
         // ---------------- sleeping / waking ----------------
 
         private void TickSleeping(float dt)
@@ -640,6 +805,16 @@ namespace SilentNight.Stealth
         private void UpdateVisual()
         {
             if (visual == null) return;
+            if (_state == CatState.CatnipPurr)
+            {
+                // Rolls around: lying, briefly sitting up, lying again. Eyes open, perfectly content.
+                int phase = (int)(_timer / 2.5f) % 3;
+                visual.SetPose(phase == 1 ? NPCPose.Sitting : NPCPose.Lying);
+                visual.SetSleeping(false);
+                visual.SetAlert(0);
+                visual.SetLocomotion(0f);
+                return;
+            }
             bool sleeping = _state == CatState.Sleeping;
             visual.SetPose(sleeping ? NPCPose.Lying : NPCPose.Standing);
             visual.SetSleeping(sleeping);
@@ -657,6 +832,8 @@ namespace SilentNight.Stealth
             Gizmos.DrawWireSphere(transform.position, awakeMeowRadius);
             Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(transform.position - transform.forward * tailOffset, tailRadius);
+            Gizmos.color = new Color(0.4f, 0.9f, 0.3f, 0.35f);
+            Gizmos.DrawWireSphere(transform.position, catnipNoticeRadius);
             Vector3 home = Application.isPlaying ? _bedPos : (bed != null ? bed.position : transform.position);
             Gizmos.color = new Color(0.5f, 0.8f, 1f, 0.5f);
             Gizmos.DrawWireSphere(home, wanderRadius);

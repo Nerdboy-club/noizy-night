@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 
 namespace SilentNight.UI
 {
-    /// <summary>Workbench: four upgrades with 5 level pips each, buy with tips (PlayerProfile.TryBuy).</summary>
+    /// <summary>Workbench: four upgrades with 5 level pips each plus catnip pouches (3 pips = pouches carried), buy with tips (PlayerProfile.TryBuy).</summary>
     public class WorkbenchView : UIView
     {
         private struct Row
@@ -18,7 +18,7 @@ namespace SilentNight.UI
         }
 
         private static readonly UpgradeType[] Types =
-            { UpgradeType.Jetpack, UpgradeType.SilentBoots, UpgradeType.Sack, UpgradeType.Grip };
+            { UpgradeType.Jetpack, UpgradeType.SilentBoots, UpgradeType.Sack, UpgradeType.Grip, UpgradeType.Catnip };
 
         private VisualElement _panel;
         private Label _wallet;
@@ -54,11 +54,12 @@ namespace SilentNight.UI
 
         private Row BuildRow(VisualElement parent, UpgradeType t)
         {
-            var row = new Row { Type = t, Pips = new VisualElement[PlayerProfile.MaxUpgradeLevel] };
+            var row = new Row { Type = t, Pips = new VisualElement[PlayerProfile.MaxLevelFor(t)] };
             row.El = UIFactory.Ignored("sn-upg", parent);
 
             var iconPlate = UIFactory.Ignored("sn-upg__plate", row.El);
-            UIFactory.Icon(IconFor(t), "sn-upg__icon", iconPlate);
+            var icon = UIFactory.Icon(IconFor(t), "sn-upg__icon", iconPlate);
+            if (t == UpgradeType.Catnip) icon.SetColors(Palette.Green, Palette.GreenDark); // green felt pouch
 
             var info = UIFactory.Ignored("sn-upg__info", row.El);
             UIFactory.Text(NameFor(t), "sn-upg__name", info);
@@ -78,6 +79,7 @@ namespace SilentNight.UI
             UpgradeType.Jetpack => IconKind.Jetpack,
             UpgradeType.SilentBoots => IconKind.Boot,
             UpgradeType.Sack => IconKind.Sack,
+            UpgradeType.Catnip => IconKind.Sack,
             _ => IconKind.Mitten
         };
 
@@ -86,6 +88,7 @@ namespace SilentNight.UI
             UpgradeType.Jetpack => "Реактивный ранец",
             UpgradeType.SilentBoots => "Бесшумные ботинки",
             UpgradeType.Sack => "Большой мешок",
+            UpgradeType.Catnip => "Кошачья мята",
             _ => "Крепкий хват"
         };
 
@@ -94,6 +97,7 @@ namespace SilentNight.UI
             UpgradeType.Jetpack => "Полёт на [Q] над столами и льдом",
             UpgradeType.SilentBoots => "Тише шаги, меньше скольжения",
             UpgradeType.Sack => "+1 подарок в мешке [R]",
+            UpgradeType.Catnip => "Бросьте [F] рядом с котом: он забудет обо всём и будет мурлыкать 20 секунд.",
             _ => "Легче нести, меньше вмятин"
         };
 
@@ -125,9 +129,9 @@ namespace SilentNight.UI
             {
                 int lvl = p != null ? p.GetLevel(r.Type) : 0;
                 for (int i = 0; i < r.Pips.Length; i++) r.Pips[i].EnableInClassList("sn-pip--on", i < lvl);
-                bool maxed = lvl >= PlayerProfile.MaxUpgradeLevel;
+                bool maxed = lvl >= PlayerProfile.MaxLevelFor(r.Type);
                 r.CostCoin.style.display = maxed ? DisplayStyle.None : DisplayStyle.Flex;
-                r.Cost.text = maxed ? "МАКС." : (p != null ? p.GetCost(r.Type).ToString() : "—");
+                r.Cost.text = maxed ? (r.Type == UpgradeType.Catnip ? "ПОЛНО" : "МАКС.") : (p != null ? p.GetCost(r.Type).ToString() : "—");
                 bool can = p != null && p.CanBuy(r.Type);
                 r.Buy.SetEnabled(can);
                 r.Buy.EnableInClassList("sn-upg__buy--max", maxed);
@@ -148,7 +152,10 @@ namespace SilentNight.UI
                     el.AddToClassList("sn-bump");
                     el.schedule.Execute(() => el.RemoveFromClassList("sn-bump")).StartingIn(180);
                 }
-                GameEvents.RaiseToast("Улучшено: " + NameFor(t));
+                if (t == UpgradeType.Catnip)
+                    GameEvents.RaiseToast($"Куплено: {NameFor(t)} ({p.CatnipPouches}/{PlayerProfile.MaxCatnip})");
+                else
+                    GameEvents.RaiseToast("Улучшено: " + NameFor(t));
             }
             Refresh(); // also called via Profile.Changed; harmless
         }

@@ -9,6 +9,10 @@ namespace SilentNight.Core
     public class PlayerProfile
     {
         public const int MaxUpgradeLevel = 5;
+        /// <summary>Catnip pouches the elf can carry at once.</summary>
+        public const int MaxCatnip = 3;
+        /// <summary>Price of one catnip pouch (flat).</summary>
+        public const int CatnipCost = 40;
 
         public int Tips = 120;
         public int CompletedRuns;
@@ -17,10 +21,14 @@ namespace SilentNight.Core
         public int SackLevel;         // capacity = 1 + SackLevel
         public int GripLevel;         // carry heavy gifts faster / less damage
         public float GadgetDurability = 100f;
+        public int CatnipPouches;     // consumable; missing in old saves → 0
 
         public int SackCapacity => 1 + SackLevel;
 
         public event Action Changed;
+
+        /// <summary>Max "level" for a workbench entry (Catnip = max pouches carried).</summary>
+        public static int MaxLevelFor(UpgradeType t) => t == UpgradeType.Catnip ? MaxCatnip : MaxUpgradeLevel;
 
         public int GetLevel(UpgradeType t) => t switch
         {
@@ -28,20 +36,32 @@ namespace SilentNight.Core
             UpgradeType.SilentBoots => SilentBootsLevel,
             UpgradeType.Sack => SackLevel,
             UpgradeType.Grip => GripLevel,
+            UpgradeType.Catnip => CatnipPouches,
             _ => 0
         };
 
-        /// <summary>Costs from the original game: base + level * step.</summary>
+        /// <summary>Costs from the original game: base + level * step. Catnip is a flat price per pouch.</summary>
         public int GetCost(UpgradeType t) => t switch
         {
             UpgradeType.Jetpack => 100 + JetpackLevel * 60,
             UpgradeType.SilentBoots => 75 + SilentBootsLevel * 50,
             UpgradeType.Sack => 85 + SackLevel * 55,
             UpgradeType.Grip => 80 + GripLevel * 50,
+            UpgradeType.Catnip => CatnipCost,
             _ => int.MaxValue
         };
 
-        public bool CanBuy(UpgradeType t) => GetLevel(t) < MaxUpgradeLevel && Tips >= GetCost(t);
+        public bool CanBuy(UpgradeType t) => GetLevel(t) < MaxLevelFor(t) && Tips >= GetCost(t);
+
+        /// <summary>Spends one catnip pouch. False when there is none.</summary>
+        public bool TryUseCatnip()
+        {
+            if (CatnipPouches <= 0) return false;
+            CatnipPouches--;
+            NotifyChanged();
+            Save();
+            return true;
+        }
 
         public bool TryBuy(UpgradeType t)
         {
@@ -53,6 +73,7 @@ namespace SilentNight.Core
                 case UpgradeType.SilentBoots: SilentBootsLevel++; break;
                 case UpgradeType.Sack: SackLevel++; break;
                 case UpgradeType.Grip: GripLevel++; break;
+                case UpgradeType.Catnip: CatnipPouches++; break;
             }
             NotifyChanged();
             Save();
@@ -83,7 +104,11 @@ namespace SilentNight.Core
                 if (File.Exists(SavePath))
                 {
                     var p = JsonUtility.FromJson<PlayerProfile>(File.ReadAllText(SavePath));
-                    if (p != null) return p;
+                    if (p != null)
+                    {
+                        p.CatnipPouches = Mathf.Clamp(p.CatnipPouches, 0, MaxCatnip);
+                        return p;
+                    }
                 }
             }
             catch (Exception e) { Debug.LogWarning($"[PlayerProfile] Load failed: {e.Message}"); }
