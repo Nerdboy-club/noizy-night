@@ -845,6 +845,7 @@ class Game {
       ? new THREE.Vector3(Math.cos(this.cameraAngleY) * 0.32, 0.85, -Math.sin(this.cameraAngleY) * 0.32)
       : new THREE.Vector3(0, 0.8, 0);
     const targetPos = localElf.mesh.position.clone().add(shoulderRight);
+    targetPos.y -= localElf.cameraKick;
 
     const dir = new THREE.Vector3(
       Math.sin(this.cameraAngleY) * Math.cos(this.cameraPitch),

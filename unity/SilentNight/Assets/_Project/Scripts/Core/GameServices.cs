@@ -25,6 +25,8 @@ namespace SilentNight.Core
 
         /// <summary>All registered players (local and, later, remote), in registration order. Index with a for-loop to avoid allocations.</summary>
         public static IReadOnlyList<IPlayerStatus> Players => _players;
+        /// <summary>Players controlled locally on this machine (used for local camera group framing).</summary>
+        public static IReadOnlyList<IPlayerStatus> LocalPlayers => _localPlayers;
 
         public static void RegisterProfile(PlayerProfile p) => Profile = p;
 

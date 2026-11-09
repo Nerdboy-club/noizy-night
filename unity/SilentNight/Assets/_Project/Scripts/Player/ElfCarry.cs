@@ -258,6 +258,15 @@ namespace SilentNight.Player
             holdPoint.rotation = transform.rotation;
         }
 
+        private bool IsLocalPlayer
+        {
+            get
+            {
+                var input = GetComponent<ElfInput>();
+                return input == null || !input.IsNetworkRemote;
+            }
+        }
+
         public bool TryPickUp(ICarryable item)
         {
             if (!PlayerGate.IsAlive(item)) return false;
@@ -269,6 +278,11 @@ namespace SilentNight.Player
             Held = item;
             item.OnPickedUp(holdPoint);
             Changed?.Invoke();
+
+            if (IsLocalPlayer && item is Gift g && g.NetworkId >= 0)
+            {
+                SilentNight.Multiplayer.CoopNetworkManager.Instance?.NotifyGiftPickedUp(g.NetworkId);
+            }
             return true;
         }
 
@@ -289,6 +303,11 @@ namespace SilentNight.Player
             if (_controller != null) v += _controller.Velocity * inheritVelocity;
             item.OnDropped(v);
             Changed?.Invoke();
+
+            if (IsLocalPlayer && item is Gift g && g.NetworkId >= 0)
+            {
+                SilentNight.Multiplayer.CoopNetworkManager.Instance?.NotifyGiftDropped(g.NetworkId, g.transform.position, v);
+            }
         }
 
         public bool TryStoreHeldInSack()
@@ -302,6 +321,11 @@ namespace SilentNight.Player
             item.OnStoredInSack();
             _sack.Add(item);
             Changed?.Invoke();
+
+            if (IsLocalPlayer && item is Gift g && g.NetworkId >= 0)
+            {
+                SilentNight.Multiplayer.CoopNetworkManager.Instance?.NotifyGiftSacked(g.NetworkId);
+            }
             return true;
         }
 
@@ -320,6 +344,11 @@ namespace SilentNight.Player
             Held = item;
             item.OnPickedUp(holdPoint);
             Changed?.Invoke();
+
+            if (IsLocalPlayer && item is Gift g && g.NetworkId >= 0)
+            {
+                SilentNight.Multiplayer.CoopNetworkManager.Instance?.NotifyGiftUnsacked(g.NetworkId);
+            }
             return true;
         }
 

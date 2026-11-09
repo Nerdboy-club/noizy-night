@@ -9,6 +9,7 @@ import {
   createWoodParquetMaterial
 } from '../rendering/TactileMaterials';
 import { createPeakMaterial } from '../rendering/ToonStyle';
+import { loadProp } from '../loaders/ModelLoader';
 
 export interface DeliveryOrder {
   id: string;
@@ -49,6 +50,7 @@ export class SantaWorkshopHub {
     this.activeOrder = this.availableOrders[0];
 
     this.buildWorkshopGeometry();
+    void this.applyModels();
     this.spawnOrderGiftsOnConveyor();
 
     this.group.traverse((child) => {
@@ -318,6 +320,26 @@ export class SantaWorkshopHub {
     this.group.add(g);
   }
 
+  private benchGroupRef?: THREE.Group;
+
+  /** Ваши Tripo-модели вместо процедурных: верстак и мешок. */
+  private async applyModels() {
+    const bench = await loadProp('/models/props/workbench.glb', { height: 1.6 });
+    if (bench && this.benchGroupRef) {
+      this.benchGroupRef.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) o.visible = false;
+      });
+      bench.position.copy(this.workbenchPosition).add(new THREE.Vector3(0.6, 0, 0));
+      bench.rotation.y = Math.PI / 2;
+      this.group.add(bench);
+    }
+    const sack = await loadProp('/models/props/sack.glb', { height: 0.9 });
+    if (sack) {
+      sack.position.set(3.2, 0, 1.6);
+      this.group.add(sack);
+    }
+  }
+
   private buildWorkshopGeometry() {
     const R = this.physics.getRapier();
     const walnut = this.tactile(0x4a2610, { roughness: 0.75, knitBump: false });
@@ -566,6 +588,7 @@ export class SantaWorkshopHub {
     const benchLight = new THREE.PointLight(0x7dd3fc, 1.8, 6);
     benchLight.position.set(-0.5, 2.4, 0);
     benchGroup.add(benchLight);
+    this.benchGroupRef = benchGroup;
     this.group.add(benchGroup);
 
     // 8. ZONE G (front centre): SANTA'S SLEIGH + LAUNCH PAD

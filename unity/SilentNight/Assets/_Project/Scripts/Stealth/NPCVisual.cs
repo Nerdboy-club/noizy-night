@@ -258,20 +258,29 @@ namespace SilentNight.Stealth
 
         private void BuildGrandpa(Transform root)
         {
-            const int pajama = 0x2f4f86, pants = 0x3b5f9c, skin = 0xf0b998, beard = 0xf1efe9,
-                      capRed = 0xc13a3a, capWhite = 0xfdfaf2, dark = 0x1b1b22, slipper = 0xa5764b;
+            const int pajama = 0x2f4f86, pants = 0x3b5f9c, robe = 0x7c1d26, robeTrim = 0xd4a038,
+                      skin = 0xf0b998, beard = 0xf5f2eb, capRed = 0xc13a3a, capWhite = 0xfdfaf2,
+                      dark = 0x1b1b22, slipper = 0x9c6236, brass = 0xe8b931;
 
-            // Legs + slippers
+            // Legs + warm reindeer slippers
             Part(PrimitiveType.Capsule, "LegL", root, new Vector3(-0.13f, 0.42f, 0f), new Vector3(0.18f, 0.42f, 0.18f), pants);
             Part(PrimitiveType.Capsule, "LegR", root, new Vector3(0.13f, 0.42f, 0f), new Vector3(0.18f, 0.42f, 0.18f), pants);
-            Part(PrimitiveType.Sphere, "SlipperL", root, new Vector3(-0.13f, 0.06f, 0.06f), new Vector3(0.2f, 0.12f, 0.3f), slipper);
-            Part(PrimitiveType.Sphere, "SlipperR", root, new Vector3(0.13f, 0.06f, 0.06f), new Vector3(0.2f, 0.12f, 0.3f), slipper);
+            Part(PrimitiveType.Sphere, "SlipperL", root, new Vector3(-0.13f, 0.06f, 0.06f), new Vector3(0.21f, 0.13f, 0.32f), slipper);
+            Part(PrimitiveType.Sphere, "SlipperR", root, new Vector3(0.13f, 0.06f, 0.06f), new Vector3(0.21f, 0.13f, 0.32f), slipper);
+            Part(PrimitiveType.Sphere, "SlipperNoseL", root, new Vector3(-0.13f, 0.08f, 0.22f), new Vector3(0.06f, 0.06f, 0.06f), capRed);
+            Part(PrimitiveType.Sphere, "SlipperNoseR", root, new Vector3(0.13f, 0.08f, 0.22f), new Vector3(0.06f, 0.06f, 0.06f), capRed);
 
-            // Tall pajama body + round belly + arms
-            Part(PrimitiveType.Capsule, "Body", root, new Vector3(0f, 1.15f, 0f), new Vector3(0.62f, 0.5f, 0.55f), pajama);
-            Part(PrimitiveType.Sphere, "Belly", root, new Vector3(0f, 1.05f, 0.08f), new Vector3(0.62f, 0.6f, 0.55f), pajama);
-            Part(PrimitiveType.Capsule, "ArmL", root, new Vector3(-0.36f, 1.2f, 0f), new Vector3(0.14f, 0.35f, 0.14f), pajama, new Vector3(0f, 0f, -10f));
-            Part(PrimitiveType.Capsule, "ArmR", root, new Vector3(0.36f, 1.2f, 0f), new Vector3(0.14f, 0.35f, 0.14f), pajama, new Vector3(0f, 0f, 10f));
+            // Cozy burgundy velvet dressing gown over flannel pajamas + golden belt + shawl collar
+            Part(PrimitiveType.Capsule, "Body", root, new Vector3(0f, 1.15f, 0f), new Vector3(0.64f, 0.52f, 0.56f), robe);
+            Part(PrimitiveType.Sphere, "Belly", root, new Vector3(0f, 1.05f, 0.08f), new Vector3(0.64f, 0.60f, 0.56f), robe);
+            Part(PrimitiveType.Cube, "PajamaFront", root, new Vector3(0f, 1.18f, 0.24f), new Vector3(0.18f, 0.58f, 0.12f), pajama);
+            Part(PrimitiveType.Cylinder, "RobeBelt", root, new Vector3(0f, 0.96f, 0.04f), new Vector3(0.66f, 0.035f, 0.60f), robeTrim);
+            Part(PrimitiveType.Capsule, "ShawlCollarL", root, new Vector3(-0.11f, 1.42f, 0.18f), new Vector3(0.10f, 0.18f, 0.10f), robeTrim, new Vector3(0f, 0f, -22f));
+            Part(PrimitiveType.Capsule, "ShawlCollarR", root, new Vector3(0.11f, 1.42f, 0.18f), new Vector3(0.10f, 0.18f, 0.10f), robeTrim, new Vector3(0f, 0f, 22f));
+            Part(PrimitiveType.Capsule, "ArmL", root, new Vector3(-0.37f, 1.2f, 0f), new Vector3(0.15f, 0.35f, 0.15f), robe, new Vector3(0f, 0f, -10f));
+            Part(PrimitiveType.Capsule, "ArmR", root, new Vector3(0.37f, 1.2f, 0f), new Vector3(0.15f, 0.35f, 0.15f), robe, new Vector3(0f, 0f, 10f));
+            Part(PrimitiveType.Sphere, "HandL", root, new Vector3(-0.42f, 0.86f, 0.02f), new Vector3(0.12f, 0.12f, 0.12f), skin);
+            Part(PrimitiveType.Sphere, "HandR", root, new Vector3(0.42f, 0.86f, 0.02f), new Vector3(0.12f, 0.12f, 0.12f), skin);
 
             // Head pivot
             var head = new GameObject("Head").transform;
@@ -281,18 +290,24 @@ namespace SilentNight.Stealth
             Head = head;
 
             Part(PrimitiveType.Sphere, "Skull", head, Vector3.zero, new Vector3(0.42f, 0.41f, 0.4f), skin);
-            Part(PrimitiveType.Sphere, "Nose", head, new Vector3(0f, -0.02f, 0.2f), new Vector3(0.11f, 0.1f, 0.11f), skin);
+            Part(PrimitiveType.Sphere, "Nose", head, new Vector3(0f, -0.02f, 0.21f), new Vector3(0.11f, 0.1f, 0.11f), skin);
             Part(PrimitiveType.Sphere, "EyeL", head, new Vector3(-0.08f, 0.06f, 0.17f), new Vector3(0.05f, 0.04f, 0.03f), dark);
             Part(PrimitiveType.Sphere, "EyeR", head, new Vector3(0.08f, 0.06f, 0.17f), new Vector3(0.05f, 0.04f, 0.03f), dark);
-            Part(PrimitiveType.Capsule, "BrowL", head, new Vector3(-0.09f, 0.12f, 0.17f), new Vector3(0.03f, 0.05f, 0.03f), beard, new Vector3(0f, 0f, 70f));
-            Part(PrimitiveType.Capsule, "BrowR", head, new Vector3(0.09f, 0.12f, 0.17f), new Vector3(0.03f, 0.05f, 0.03f), beard, new Vector3(0f, 0f, -70f));
-            Part(PrimitiveType.Sphere, "Beard", head, new Vector3(0f, -0.17f, 0.1f), new Vector3(0.34f, 0.26f, 0.26f), beard);
+            // Brass reading spectacles
+            Part(PrimitiveType.Cylinder, "GlassesL", head, new Vector3(-0.08f, 0.05f, 0.19f), new Vector3(0.09f, 0.008f, 0.09f), brass, new Vector3(90f, 0f, 0f));
+            Part(PrimitiveType.Cylinder, "GlassesR", head, new Vector3(0.08f, 0.05f, 0.19f), new Vector3(0.09f, 0.008f, 0.09f), brass, new Vector3(90f, 0f, 0f));
+            Part(PrimitiveType.Cube, "GlassesBridge", head, new Vector3(0f, 0.05f, 0.195f), new Vector3(0.06f, 0.015f, 0.015f), brass);
+            Part(PrimitiveType.Capsule, "BrowL", head, new Vector3(-0.09f, 0.12f, 0.17f), new Vector3(0.035f, 0.055f, 0.035f), beard, new Vector3(0f, 0f, 70f));
+            Part(PrimitiveType.Capsule, "BrowR", head, new Vector3(0.09f, 0.12f, 0.17f), new Vector3(0.035f, 0.055f, 0.035f), beard, new Vector3(0f, 0f, -70f));
+            Part(PrimitiveType.Capsule, "MustacheL", head, new Vector3(-0.06f, -0.07f, 0.19f), new Vector3(0.05f, 0.08f, 0.05f), beard, new Vector3(0f, 0f, 78f));
+            Part(PrimitiveType.Capsule, "MustacheR", head, new Vector3(0.06f, -0.07f, 0.19f), new Vector3(0.05f, 0.08f, 0.05f), beard, new Vector3(0f, 0f, -78f));
+            Part(PrimitiveType.Sphere, "Beard", head, new Vector3(0f, -0.17f, 0.1f), new Vector3(0.35f, 0.27f, 0.27f), beard);
 
             // Nightcap: white brim, red bent cone (capsules), white pompom
             Part(PrimitiveType.Cylinder, "CapBrim", head, new Vector3(0f, 0.16f, -0.02f), new Vector3(0.44f, 0.04f, 0.44f), capWhite, new Vector3(-6f, 0f, 0f));
             Part(PrimitiveType.Capsule, "CapLow", head, new Vector3(0f, 0.3f, -0.07f), new Vector3(0.3f, 0.18f, 0.3f), capRed, new Vector3(-20f, 0f, 0f));
             Part(PrimitiveType.Capsule, "CapTip", head, new Vector3(0f, 0.46f, -0.2f), new Vector3(0.14f, 0.14f, 0.14f), capRed, new Vector3(-50f, 0f, 0f));
-            Part(PrimitiveType.Sphere, "Pompom", head, new Vector3(0f, 0.53f, -0.32f), new Vector3(0.12f, 0.12f, 0.12f), capWhite);
+            Part(PrimitiveType.Sphere, "Pompom", head, new Vector3(0f, 0.53f, -0.32f), new Vector3(0.13f, 0.13f, 0.13f), capWhite);
         }
 
         private void BuildCat(Transform root)

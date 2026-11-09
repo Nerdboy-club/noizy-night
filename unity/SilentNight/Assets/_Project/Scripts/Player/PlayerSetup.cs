@@ -15,8 +15,13 @@ namespace SilentNight.Player
 
         /// <summary>Player 1 (keyboard/mouse + free gamepads), with its own third-person camera and LocalCoopJoin.</summary>
         /// <param name="pos">Feet position.</param>
-        /// <param name="themeIndex">0 green, 1 red, 2 blue, 3 purple.</param>
-        public static GameObject CreatePlayer(Vector3 pos, int themeIndex) => CreatePlayer(pos, themeIndex, 0, null);
+        /// <param name="themeIndex">0 green, 1 red, 2 blue, 3 purple, 4 female.</param>
+        public static GameObject CreatePlayer(Vector3 pos, int themeIndex)
+        {
+            if (themeIndex == 0 && GameServices.Profile != null)
+                themeIndex = GameServices.Profile.SelectedSkin;
+            return CreatePlayer(pos, themeIndex, 0, null);
+        }
 
         /// <summary>
         /// Builds an elf for a local player slot.
@@ -26,10 +31,21 @@ namespace SilentNight.Player
         /// and stays where it is created instead of snapping to PlayerSpawn.
         /// TODO (split-screen step): give extra elves their own rig/Camera/Brain + viewport when split-screen is on.
         /// </summary>
+        /// <summary>Builds a secondary local elf controlled by Arrow keys + Enter / RightShift / RightCtrl.</summary>
+        public static GameObject CreateKeyboardPlayer(Vector3 pos, int themeIndex, int playerIndex)
+            => CreatePlayerInternal(pos, themeIndex, playerIndex, null, true, false);
+
+        /// <summary>Builds a remote network-replicated elf avatar for Online/LAN Co-op.</summary>
+        public static GameObject CreateNetworkRemotePlayer(Vector3 pos, int themeIndex, int playerIndex)
+            => CreatePlayerInternal(pos, themeIndex, playerIndex, null, false, true);
+
         public static GameObject CreatePlayer(Vector3 pos, int themeIndex, int playerIndex, Gamepad gamepad)
+            => CreatePlayerInternal(pos, themeIndex, playerIndex, gamepad, false, false);
+
+        private static GameObject CreatePlayerInternal(Vector3 pos, int themeIndex, int playerIndex, Gamepad gamepad, bool keyboardSecondary, bool networkRemote)
         {
-            bool primary = playerIndex <= 0;
-            var go = new GameObject(primary ? "Elf" : "Elf_P" + (playerIndex + 1));
+            bool primary = playerIndex <= 0 && !networkRemote;
+            var go = new GameObject(primary ? "Elf" : (networkRemote ? "Elf_Net_P" + (playerIndex + 1) : "Elf_P" + (playerIndex + 1)));
             TrySetTag(go, GameConstants.TagPlayer);
             int layer = LayerMask.NameToLayer(GameConstants.LayerPlayer);
             if (layer >= 0) go.layer = layer;
@@ -46,7 +62,15 @@ namespace SilentNight.Player
 
             // Order matters at runtime (Awake runs inside AddComponent): visual → carry → interactor → controller → animator → rig.
             var input = go.AddComponent<ElfInput>();
-            if (!primary) input.AssignPlayer(playerIndex, gamepad);
+            if (networkRemote)
+            {
+                input.AssignNetworkRemotePlayer(playerIndex);
+            }
+            else if (!primary)
+            {
+                if (keyboardSecondary) input.AssignKeyboardPlayer(playerIndex);
+                else input.AssignPlayer(playerIndex, gamepad);
+            }
             var visual = go.AddComponent<ElfVisual>();
             visual.ThemeIndex = themeIndex;
             visual.EnsureAnchors();
@@ -56,6 +80,7 @@ namespace SilentNight.Player
             if (!primary) DisableSpawnSnap(controller);
             go.AddComponent<ElfAnimator>();
             go.AddComponent<ElfRagdoll>();
+            visual.PurgePlaceholderMeshes();
             go.AddComponent<CatnipThrower>(); // [F] / LB: throw catnip (after ElfInput + ElfRagdoll, which it caches in Awake)
             go.AddComponent<ElfBonk>(); // co-op: elves running into each other bonk heads / shove (no-op solo)
             if (primary)

@@ -296,6 +296,71 @@ namespace SilentNight.Tests
             yield return null;
             Assert.AreEqual(0, (int)joinT.GetProperty("RosterCount").GetValue(null), "unplugged friend forgotten");
         }
+
+        [UnityTest]
+        public IEnumerator Hub_ElfRagdollDoesNotFlyAwayOnSnapToRoot()
+        {
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/Hub.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(0.4f);
+
+            Type ctrlT = Type.GetType("SilentNight.Player.ElfController, Assembly-CSharp", true);
+            Type ragT = Type.GetType("SilentNight.Player.ElfRagdoll, Assembly-CSharp", true);
+            var ctrl = (Component)UnityEngine.Object.FindAnyObjectByType(ctrlT);
+            var rag = (Component)ctrl.GetComponent(ragT);
+            Assert.NotNull(ctrl);
+            Assert.NotNull(rag);
+
+            // Move elf 3m away from initial spawn and trigger SnapToRoot multiple times
+            ctrlT.GetMethod("Teleport").Invoke(ctrl, new object[] { new Vector3(2.5f, 0.05f, -2.0f), Quaternion.identity, true });
+            for (int i = 0; i < 15; i++)
+                yield return null;
+
+            var pelvis = (Transform)ragT.GetProperty("PelvisTransform").GetValue(rag);
+            Assert.NotNull(pelvis);
+            Assert.Less(pelvis.position.y, 1.2f, "pelvisY must stay near ground level and never fly to 117m");
+            Assert.Less(Vector3.Distance(pelvis.position, ctrl.transform.position), 0.8f, "pelvis stays attached to root");
+        }
+
+        [UnityTest]
+        public IEnumerator Hub_KeyboardSecondPlayerJoinsAndSplitScreenToggles()
+        {
+            Type joinT = Type.GetType("SilentNight.Player.LocalCoopJoin, Assembly-CSharp", true);
+            Type rigT = Type.GetType("SilentNight.Player.ThirdPersonCameraRig, Assembly-CSharp", true);
+            joinT.GetMethod("ClearRoster").Invoke(null, null);
+            rigT.GetMethod("SetSplitScreen").Invoke(null, new object[] { false });
+
+            AsyncOperation op = EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/_Project/Scenes/Hub.unity", new LoadSceneParameters(LoadSceneMode.Single));
+            while (!op.isDone) yield return null;
+            yield return new WaitForSeconds(0.4f);
+
+            var join = (Component)UnityEngine.Object.FindAnyObjectByType(joinT);
+            Assert.NotNull(join);
+            var p2Go = (GameObject)joinT.GetMethod("JoinKeyboard").Invoke(join, null);
+            Assert.NotNull(p2Go, "Keyboard Player 2 spawned");
+            yield return new WaitForSeconds(0.3f);
+
+            Type gs = Type.GetType("SilentNight.Core.GameServices, Assembly-CSharp", true);
+            var players = (System.Collections.ICollection)gs.GetProperty("Players").GetValue(null);
+            Assert.AreEqual(2, players.Count, "two players active with Keyboard P2");
+
+            // Toggle Split-Screen ON
+            bool splitOn = (bool)rigT.GetMethod("ToggleSplitScreen").Invoke(null, null);
+            Assert.IsTrue(splitOn, "split-screen enabled");
+            yield return null;
+            yield return null;
+            Assert.AreEqual(0.5f, Camera.main.rect.width, 0.01f, "Main Camera is left half of split-screen");
+
+            // Toggle Split-Screen OFF
+            bool splitOff = (bool)rigT.GetMethod("ToggleSplitScreen").Invoke(null, null);
+            Assert.IsFalse(splitOff, "split-screen disabled");
+            yield return null;
+            Assert.AreEqual(1.0f, Camera.main.rect.width, 0.01f, "Main Camera restored to full-screen");
+
+            Type inputT = Type.GetType("SilentNight.Player.ElfInput, Assembly-CSharp", true);
+            joinT.GetMethod("Leave").Invoke(null, new object[] { p2Go.GetComponent(inputT), null });
+            yield return null;
+        }
     }
 }
 #endif

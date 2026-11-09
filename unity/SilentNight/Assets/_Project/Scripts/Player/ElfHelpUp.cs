@@ -18,6 +18,7 @@ namespace SilentNight.Player
     {
         public const string PromptText = "Поднять друга";
         public const string TriggerName = "HelpUpTrigger";
+        public static event System.Action<int> PlayerHelpedUp;
 
         [SerializeField] private float triggerRadius = 0.4f; // ~0.8 m across
         [SerializeField] private float triggerHeight = 0.25f;
@@ -101,6 +102,7 @@ namespace SilentNight.Player
             int helper = helperInput != null ? helperInput.PlayerIndex : 0;
             GameEvents.RaiseToast($"Эльф {helper + 1} поднял эльфа {me + 1}!");
             GameEvents.RaiseNoise(new NoiseEvent(transform.position, helpNoise, NoiseSource.Footstep, interactor.Transform.gameObject));
+            PlayerHelpedUp?.Invoke(me);
         }
     }
 }

@@ -32,17 +32,31 @@ namespace SilentNight.EditorTools
         public const string MatTile = "Tile";
         public const string MatIce = "Ice";
         public const string MatWall = "Wall";
+        public const string MatWallBurgundy = "WallBurgundy";
+        public const string MatWallSpruce = "WallSpruce";
+        public const string MatWallNavy = "WallNavy";
+        public const string MatWallOchre = "WallOchre";
         public const string MatBrick = "Brick";
         public const string MatSnow = "Snow";
         public const string MatEmissiveWarm = "EmissiveWarm";
+        public const string MatEmissiveMoon = "EmissiveMoon";
+        public const string MatEmissiveGold = "EmissiveGold";
         public const string MatConcrete = "Concrete";
         public const string MatRed = "Red";
         public const string MatGreen = "Green";
         public const string MatMetal = "Metal";
+        public const string MatBrass = "Brass";
         public const string MatFabric = "Fabric";
+        public const string MatVelvetRed = "VelvetRed";
+        public const string MatVelvetGreen = "VelvetGreen";
+        public const string MatCreamTrim = "CreamTrim";
         public const string MatGold = "Gold";
         public const string MatDark = "Dark";
         public const string MatPaper = "Paper";
+        public const string MatPainting0 = "Painting0";
+        public const string MatPainting1 = "Painting1";
+        public const string MatPainting2 = "Painting2";
+        public const string MatPainting3 = "Painting3";
 
         private static readonly string[] RequiredLayers =
         {
@@ -167,29 +181,45 @@ namespace SilentNight.EditorTools
         public static Dictionary<string, Material> EnsureMaterials()
         {
             EnsureFolder(MaterialsFolder);
+            TactileArtGenerator.EnsureGenerated();
+
             MatCache.Clear();
-            Make(MatWood, new Color(0.55f, 0.33f, 0.17f), 0.35f);
-            Make(MatDarkWood, new Color(0.26f, 0.14f, 0.07f), 0.35f);
-            Make(MatCarpet, new Color(0.52f, 0.11f, 0.13f), 0.05f);
-            Make(MatTile, new Color(0.86f, 0.85f, 0.80f), 0.75f);
-            Make(MatIce, new Color(0.72f, 0.88f, 0.99f), 0.95f, 0.1f);
-            Make(MatWall, new Color(0.84f, 0.76f, 0.62f), 0.1f);
-            Make(MatBrick, new Color(0.58f, 0.25f, 0.13f), 0.1f);
-            Make(MatSnow, new Color(0.92f, 0.95f, 1.0f), 0.3f);
-            Make(MatEmissiveWarm, new Color(1.0f, 0.86f, 0.62f), 0.3f, 0f, new Color(1.0f, 0.62f, 0.25f) * 2.5f);
-            Make(MatConcrete, new Color(0.42f, 0.43f, 0.45f), 0.15f);
-            Make(MatRed, new Color(0.75f, 0.12f, 0.12f), 0.3f);
-            Make(MatGreen, new Color(0.10f, 0.38f, 0.18f), 0.15f);
-            Make(MatMetal, new Color(0.60f, 0.63f, 0.68f), 0.55f, 0.8f);
-            Make(MatFabric, new Color(0.20f, 0.30f, 0.50f), 0.05f);
-            Make(MatGold, new Color(0.88f, 0.66f, 0.18f), 0.6f, 0.8f);
-            Make(MatDark, new Color(0.07f, 0.06f, 0.06f), 0.1f);
-            Make(MatPaper, new Color(0.95f, 0.91f, 0.80f), 0.05f);
+            Make(MatWood, new Color(0.68f, 0.44f, 0.24f), 0.48f, 0f, null, "Wood");
+            Make(MatDarkWood, new Color(0.32f, 0.17f, 0.09f), 0.42f, 0f, null, "DarkWood");
+            Make(MatCarpet, new Color(0.62f, 0.13f, 0.15f), 0.12f, 0f, null, "Carpet");
+            Make(MatTile, new Color(0.92f, 0.90f, 0.84f), 0.82f, 0.05f, null, "Tile");
+            Make(MatIce, new Color(0.74f, 0.90f, 1.0f), 0.96f, 0.15f, new Color(0.18f, 0.32f, 0.48f));
+            Make(MatWall, new Color(0.90f, 0.83f, 0.70f), 0.18f, 0f, null, "Wall");
+            Make(MatWallBurgundy, new Color(0.50f, 0.14f, 0.18f), 0.22f, 0f, null, "WallBurgundy");
+            Make(MatWallSpruce, new Color(0.13f, 0.32f, 0.23f), 0.22f, 0f, null, "WallSpruce");
+            Make(MatWallNavy, new Color(0.15f, 0.22f, 0.38f), 0.22f, 0f, null, "WallNavy");
+            Make(MatWallOchre, new Color(0.70f, 0.52f, 0.28f), 0.22f, 0f, null, "WallOchre");
+            Make(MatBrick, new Color(0.64f, 0.28f, 0.16f), 0.18f, 0f, null, "Brick");
+            Make(MatSnow, new Color(0.94f, 0.97f, 1.0f), 0.35f, 0f, null, "Snow");
+            Make(MatEmissiveWarm, new Color(1.0f, 0.88f, 0.64f), 0.5f, 0f, new Color(1.0f, 0.68f, 0.28f) * 2.4f);
+            Make(MatEmissiveMoon, Color.white, 0.85f, 0f, new Color(0.55f, 0.78f, 1.0f) * 0.95f, "WindowView", false);
+            Make(MatEmissiveGold, new Color(1.0f, 0.85f, 0.38f), 0.75f, 0.4f, new Color(1.0f, 0.74f, 0.22f) * 2.0f);
+            Make(MatConcrete, new Color(0.48f, 0.50f, 0.53f), 0.22f, 0f, null, "Concrete");
+            Make(MatRed, new Color(0.82f, 0.14f, 0.14f), 0.42f);
+            Make(MatGreen, new Color(0.12f, 0.44f, 0.22f), 0.32f);
+            Make(MatMetal, new Color(0.68f, 0.71f, 0.76f), 0.70f, 0.85f);
+            Make(MatBrass, new Color(0.90f, 0.71f, 0.28f), 0.78f, 0.88f);
+            Make(MatFabric, new Color(0.22f, 0.34f, 0.56f), 0.12f);
+            Make(MatVelvetRed, new Color(0.66f, 0.10f, 0.14f), 0.18f);
+            Make(MatVelvetGreen, new Color(0.11f, 0.36f, 0.22f), 0.18f);
+            Make(MatCreamTrim, new Color(0.95f, 0.91f, 0.82f), 0.45f);
+            Make(MatGold, new Color(0.92f, 0.72f, 0.22f), 0.76f, 0.85f);
+            Make(MatDark, new Color(0.08f, 0.07f, 0.08f), 0.20f);
+            Make(MatPaper, new Color(0.96f, 0.92f, 0.82f), 0.15f);
+            Make(MatPainting0, Color.white, 0.35f, 0f, new Color(0.14f, 0.18f, 0.26f), "Painting0", false);
+            Make(MatPainting1, Color.white, 0.35f, 0f, new Color(0.12f, 0.22f, 0.18f), "Painting1", false);
+            Make(MatPainting2, Color.white, 0.35f, 0f, new Color(0.18f, 0.16f, 0.24f), "Painting2", false);
+            Make(MatPainting3, Color.white, 0.35f, 0f, new Color(0.20f, 0.16f, 0.14f), "Painting3", false);
             AssetDatabase.SaveAssets();
             return new Dictionary<string, Material>(MatCache);
         }
 
-        private static void Make(string key, Color color, float smoothness, float metallic = 0f, Color? emission = null)
+        private static void Make(string key, Color color, float smoothness, float metallic = 0f, Color? emission = null, string texName = null, bool useNormal = true)
         {
             string path = $"{MaterialsFolder}/M_{key}.mat";
             Shader shader = Shader.Find(LitShaderName);
@@ -205,8 +235,32 @@ namespace SilentNight.EditorTools
             else if (mat.shader != shader) mat.shader = shader;
 
             mat.name = "M_" + key;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+
+            Texture2D baseTex = !string.IsNullOrEmpty(texName)
+                ? AssetDatabase.LoadAssetAtPath<Texture2D>($"{TactileArtGenerator.TexFolder}/{texName}.png")
+                : null;
+            Texture2D normTex = (!string.IsNullOrEmpty(texName) && useNormal)
+                ? AssetDatabase.LoadAssetAtPath<Texture2D>($"{TactileArtGenerator.TexFolder}/{texName}_n.png")
+                : null;
+
+            Color tint = baseTex != null ? Color.white : color;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", tint);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", tint);
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", baseTex);
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", baseTex);
+
+            if (normTex != null && mat.HasProperty("_BumpMap"))
+            {
+                mat.SetTexture("_BumpMap", normTex);
+                if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", 0.85f);
+                mat.EnableKeyword("_NORMALMAP");
+            }
+            else if (mat.HasProperty("_BumpMap"))
+            {
+                mat.SetTexture("_BumpMap", null);
+                mat.DisableKeyword("_NORMALMAP");
+            }
+
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smoothness);
             if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metallic);
 
@@ -214,6 +268,7 @@ namespace SilentNight.EditorTools
             {
                 mat.EnableKeyword("_EMISSION");
                 if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", emission.Value);
+                if (baseTex != null && mat.HasProperty("_EmissionMap")) mat.SetTexture("_EmissionMap", baseTex);
                 mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             }
             else
@@ -316,7 +371,7 @@ namespace SilentNight.EditorTools
             // Public setters exist for these:
             urp.supportsHDR = true;
             urp.msaaSampleCount = 4;
-            urp.shadowDistance = 40f;
+            urp.shadowDistance = 45f;
             urp.shadowCascadeCount = 2;
 
             // The rest via serialized names (internal setters in URP 17). VERIFY: property names (URP 17.0).
@@ -326,7 +381,8 @@ namespace SilentNight.EditorTools
             SetInt(so, "m_MainLightShadowmapResolution", 2048);
             SetInt(so, "m_AdditionalLightsRenderingMode", 1);   // PerPixel
             SetInt(so, "m_AdditionalLightsPerObjectLimit", 8);
-            SetBool(so, "m_AdditionalLightShadowsSupported", false);
+            SetBool(so, "m_AdditionalLightShadowsSupported", true);
+            SetInt(so, "m_AdditionalLightsShadowmapResolution", 2048, warn: false);
             SetBool(so, "m_SoftShadowsSupported", true);
             SetInt(so, "m_SoftShadowQuality", 2, warn: false);  // Medium (Unity 6)
             SetBool(so, "m_SupportsHDR", true);
@@ -379,34 +435,34 @@ namespace SilentNight.EditorTools
             }
 
             var bloom = profile.Add<Bloom>(true);
-            bloom.threshold.Override(0.85f);
-            bloom.intensity.Override(0.9f);
-            bloom.scatter.Override(0.7f);
-            bloom.tint.Override(new Color(1f, 0.85f, 0.65f));
+            bloom.threshold.Override(0.95f);
+            bloom.intensity.Override(0.65f);
+            bloom.scatter.Override(0.65f);
+            bloom.tint.Override(new Color(1f, 0.90f, 0.72f));
 
             var tonemap = profile.Add<Tonemapping>(true);
             tonemap.mode.Override(TonemappingMode.ACES);
 
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.Override(0.32f);
+            vignette.intensity.Override(0.18f);
             vignette.smoothness.Override(0.45f);
 
-            // Miniature / stop-motion diorama look: the far room softly out of focus.
+            // Crisp tactile stop-motion look: only blur very far background (> 38 m), keeping rooms razor-sharp.
             var dof = profile.Add<DepthOfField>(true);
             dof.mode.Override(DepthOfFieldMode.Gaussian);
-            dof.gaussianStart.Override(5f);
-            dof.gaussianEnd.Override(16f);
-            dof.gaussianMaxRadius.Override(1.1f);
+            dof.gaussianStart.Override(38f);
+            dof.gaussianEnd.Override(75f);
+            dof.gaussianMaxRadius.Override(0.65f);
             dof.highQualitySampling.Override(true);
 
             var wb = profile.Add<WhiteBalance>(true);
-            wb.temperature.Override(8f);
+            wb.temperature.Override(6f);
 
             var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.Override(0.15f);
-            color.contrast.Override(14f);
-            color.saturation.Override(12f);
-            color.colorFilter.Override(new Color(1f, 0.96f, 0.9f));
+            color.postExposure.Override(0.35f);
+            color.contrast.Override(18f);
+            color.saturation.Override(16f);
+            color.colorFilter.Override(new Color(1f, 0.98f, 0.94f));
 
             foreach (VolumeComponent c in profile.components)
             {
@@ -454,7 +510,7 @@ namespace SilentNight.EditorTools
 
             ps.scaleMode = UnityEngine.UIElements.PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.MatchWidthOrHeight;
+            ps.screenMatchMode = UnityEngine.UIElements.PanelScreenMatchMode.Expand;
             ps.match = 0.5f;
 
             if (ps.themeStyleSheet == null)

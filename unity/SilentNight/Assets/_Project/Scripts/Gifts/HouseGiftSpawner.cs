@@ -60,7 +60,8 @@ namespace SilentNight.Gifts
                 else
                     pos.y += spawnHeight + halfH;
 
-                var gift = GiftFactory.Create(kind, pos, transform.rotation);
+                int netId = 500 + i;
+                var gift = GiftFactory.Create(kind, pos, transform.rotation, netId);
                 SpawnedGifts.Add(gift);
             }
 

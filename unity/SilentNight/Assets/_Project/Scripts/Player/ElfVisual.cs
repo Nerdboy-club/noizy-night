@@ -14,7 +14,7 @@ namespace SilentNight.Player
     public class ElfVisual : MonoBehaviour
     {
         [SerializeField] private GameObject modelPrefab;
-        [Range(0, 3)] [SerializeField] private int themeIndex;
+        [Range(0, 4)] [SerializeField] private int themeIndex;
         [SerializeField] private Vector3 holdPointLocal = new Vector3(0f, 0.3f, 0.26f);
         [SerializeField] private Vector3 sackAnchorLocal = new Vector3(0f, 0.28f, -0.17f);
         [SerializeField] private float crouchVisualScaleY = 0.7f;
@@ -26,17 +26,19 @@ namespace SilentNight.Player
         // tunic, hat, trim
         private static readonly Color[] TunicColors =
         {
-            new Color(0.15f, 0.62f, 0.25f), // green
-            new Color(0.80f, 0.16f, 0.16f), // red
-            new Color(0.22f, 0.42f, 0.86f), // blue
-            new Color(0.56f, 0.26f, 0.76f)  // purple
+            new Color(0.15f, 0.62f, 0.25f), // 0 green (classic)
+            new Color(0.80f, 0.16f, 0.16f), // 1 red (scout)
+            new Color(0.22f, 0.42f, 0.86f), // 2 blue (mechanic)
+            new Color(0.56f, 0.26f, 0.76f), // 3 purple (trapper)
+            new Color(0.55f, 0.12f, 0.20f)  // 4 burgundy (female elf)
         };
         private static readonly Color[] HatColors =
         {
             new Color(0.85f, 0.12f, 0.14f),
             new Color(0.12f, 0.60f, 0.24f),
             new Color(0.95f, 0.80f, 0.20f),
-            new Color(0.15f, 0.70f, 0.68f)
+            new Color(0.15f, 0.70f, 0.68f),
+            new Color(0.55f, 0.12f, 0.20f)
         };
         private static readonly Color SkinColor = new Color(1.0f, 0.84f, 0.72f);
         private static readonly Color TrimColor = new Color(0.96f, 0.96f, 0.96f);
@@ -81,6 +83,20 @@ namespace SilentNight.Player
             set => modelPrefab = value; // takes effect on next Awake/Build
         }
 
+        /// <summary>Destroys any primitive placeholder body meshes (leaving gadgets like jetpack/sack).</summary>
+        public void PurgePlaceholderMeshes()
+        {
+            if (_visualRoot == null) return;
+            for (int i = _visualRoot.childCount - 1; i >= 0; i--)
+            {
+                Transform ch = _visualRoot.GetChild(i);
+                if (ch == _jetpackVisual || ch == _sackVisual) continue;
+                Destroy(ch.gameObject);
+            }
+            _tunicRenderers = System.Array.Empty<Renderer>();
+            _hatRenderers = System.Array.Empty<Renderer>();
+        }
+
         /// <summary>Hides/shows the placeholder or model body (gadgets such as the jetpack stay). Used by ElfRagdoll.</summary>
         public void SetBodyVisible(bool visible)
         {
@@ -88,8 +104,10 @@ namespace SilentNight.Player
             for (int i = 0; i < _visualRoot.childCount; i++)
             {
                 Transform ch = _visualRoot.GetChild(i);
-                if (ch == _jetpackVisual) continue;
+                if (ch == _jetpackVisual || ch == _sackVisual) continue;
                 ch.gameObject.SetActive(visible);
+                foreach (Renderer r in ch.GetComponentsInChildren<Renderer>(true))
+                    r.enabled = visible;
             }
         }
 
@@ -127,6 +145,10 @@ namespace SilentNight.Player
         {
             _controller = GetComponent<ElfController>();
             _carry = GetComponent<ElfCarry>();
+            if (GetComponent<ElfRagdoll>() != null)
+            {
+                PurgePlaceholderMeshes();
+            }
             HookAnimator();
         }
 
@@ -146,7 +168,11 @@ namespace SilentNight.Player
             _visualRoot = root.transform;
             _visualRoot.SetParent(transform, false);
 
-            if (modelPrefab != null)
+            if (GetComponent<ElfRagdoll>() != null)
+            {
+                // ElfRagdoll owns the 3D model and animated puppet. Do not spawn duplicate primitive body!
+            }
+            else if (modelPrefab != null)
             {
                 GameObject model = Instantiate(modelPrefab, _visualRoot);
                 model.transform.localPosition = Vector3.zero;
@@ -174,6 +200,7 @@ namespace SilentNight.Player
 
         private void BuildPlaceholder()
         {
+            if (GetComponent<ElfRagdoll>() != null) return;
             Color tunic = TunicColors[Mathf.Clamp(themeIndex, 0, TunicColors.Length - 1)];
             Color hat = HatColors[Mathf.Clamp(themeIndex, 0, HatColors.Length - 1)];
             _tunicMat = CreateMaterial(tunic);

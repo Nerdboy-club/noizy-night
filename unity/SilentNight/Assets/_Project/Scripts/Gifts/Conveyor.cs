@@ -38,7 +38,7 @@ namespace SilentNight.Gifts
         private Order _order;
         private bool _orderInitialised;
         private readonly List<Gift> _spawned = new List<Gift>(8);
-        private readonly int[] _need = new int[3];
+        private readonly int[] _need = new int[8];
         private readonly Collider[] _overlap = new Collider[16];
         private float _recheckTimer;
         private float _spawnTimer;
@@ -84,8 +84,15 @@ namespace SilentNight.Gifts
                 Recheck();
             }
 
-            _spawnTimer -= dt;
-            if (_spawnTimer <= 0f && TrySpawnNext()) _spawnTimer = spawnInterval;
+            // In co-op, only the Host spawns gifts on the belt to prevent duplicate/desynced presents
+            bool isClient = SilentNight.Multiplayer.CoopNetworkManager.Instance != null &&
+                            SilentNight.Multiplayer.CoopNetworkManager.Instance.IsConnectedClient;
+
+            if (!isClient)
+            {
+                _spawnTimer -= dt;
+                if (_spawnTimer <= 0f && TrySpawnNext()) _spawnTimer = spawnInterval;
+            }
 
             AnimateSlats(dt);
         }
@@ -120,7 +127,7 @@ namespace SilentNight.Gifts
 
         private void ComputeNeed()
         {
-            _need[0] = _need[1] = _need[2] = 0;
+            System.Array.Clear(_need, 0, _need.Length);
             if (_order == null) return;
 
             var gifts = _order.Gifts;
@@ -154,7 +161,13 @@ namespace SilentNight.Gifts
 
                 // Bike's long side (local X) along the belt.
                 Quaternion rot = kind == GiftKind.Huge ? transform.rotation * Quaternion.Euler(0f, 90f, 0f) : transform.rotation;
-                var gift = GiftFactory.Create(kind, pos, rot);
+                var net = SilentNight.Multiplayer.CoopNetworkManager.Instance;
+                int netId = net != null ? net.GetNextGiftNetId() : -1;
+                var gift = GiftFactory.Create(kind, pos, rot, netId);
+                if (net != null && net.Role == SilentNight.Multiplayer.CoopNetworkManager.NetRole.Host)
+                {
+                    net.BroadcastGiftSpawn(gift);
+                }
                 _spawned.Add(gift);
                 _need[(int)kind]--;
                 return true;

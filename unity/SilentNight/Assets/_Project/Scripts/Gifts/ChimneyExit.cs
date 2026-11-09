@@ -50,7 +50,7 @@ namespace SilentNight.Gifts
         public override void Interact(IInteractor interactor)
         {
             if (!AllDelivered) GameEvents.RaiseToast("Эльф сбежал через камин. Заказ не оплачен.");
-            GameEvents.RaiseRequestReturnToHub();
+            SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedReturnToHub(!AllDelivered);
         }
     }
 }

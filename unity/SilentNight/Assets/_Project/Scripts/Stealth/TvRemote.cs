@@ -97,7 +97,7 @@ namespace SilentNight.Stealth
 
         private NoisyTV FindNearestTv()
         {
-            NoisyTV[] all = FindObjectsByType<NoisyTV>(FindObjectsSortMode.None);
+            NoisyTV[] all = FindObjectsByType<NoisyTV>();
             NoisyTV best = null;
             float bestD = float.PositiveInfinity;
             Vector3 p = transform.position;

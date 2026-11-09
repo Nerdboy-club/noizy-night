@@ -65,6 +65,26 @@ namespace SilentNight.Player
         private bool _grouped;
         private Vector3 _groupCenter;
         private float _groupRadius;
+        private bool _isSecondarySplitRig;
+        private Camera _splitCamera;
+
+        /// <summary>When true and 2+ players are active, each local player gets a split-screen viewport instead of group framing.</summary>
+        public static bool SplitScreenEnabled { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => SplitScreenEnabled = false;
+
+        /// <summary>Toggles between Shared-Screen group camera and Split-Screen viewports.</summary>
+        public static bool ToggleSplitScreen()
+        {
+            SetSplitScreen(!SplitScreenEnabled);
+            return SplitScreenEnabled;
+        }
+
+        public static void SetSplitScreen(bool enabled)
+        {
+            SplitScreenEnabled = enabled;
+        }
 
         /// <summary>True while the rig frames several local elves (shared-screen co-op).</summary>
         public bool IsFramingGroup => _grouped;
@@ -96,14 +116,19 @@ namespace SilentNight.Player
 
         private void Start()
         {
+            if (_input == null) _input = GetComponent<ElfInput>();
+            _isSecondarySplitRig = _input != null && _input.PlayerIndex > 0;
             if (_controller == null)
             {
                 _controller = GetComponent<ElfController>();
                 if (_controller != null) _controller.Teleported += OnTeleported;
             }
             EnsurePivot();
-            EnsureCamera();
-            EnsureBrain();
+            if (!_isSecondarySplitRig)
+            {
+                EnsureCamera();
+                EnsureBrain();
+            }
             UpdatePivot();
         }
 
@@ -111,6 +136,7 @@ namespace SilentNight.Player
         {
             if (_createdCamera && cinemachineCamera != null) Destroy(cinemachineCamera.gameObject);
             if (_createdPivot && followTarget != null) Destroy(followTarget.gameObject);
+            if (_splitCamera != null) Destroy(_splitCamera.gameObject);
         }
 
         // ---------------- setup ----------------
@@ -202,7 +228,7 @@ namespace SilentNight.Player
         private static void EnsureBrain()
         {
             Camera cam = Camera.main;
-            if (cam == null) cam = Object.FindFirstObjectByType<Camera>();
+            if (cam == null) cam = Object.FindAnyObjectByType<Camera>();
             if (cam == null)
             {
                 var go = new GameObject("Main Camera");
@@ -218,6 +244,7 @@ namespace SilentNight.Player
         private void Update()
         {
             if (_input == null) _input = GetComponent<ElfInput>();
+            _isSecondarySplitRig = _input != null && _input.PlayerIndex > 0;
             if (_input != null) HandleInput();
 
             UpdatePivot(); // also refreshes the group frame used below
@@ -228,6 +255,133 @@ namespace SilentNight.Player
             float k = 1f - Mathf.Exp(-distanceSmoothing * Time.unscaledDeltaTime);
             _distance = Mathf.Lerp(_distance, desired, k);
             if (_follow != null) _follow.CameraDistance = _distance;
+
+            if (!_isSecondarySplitRig)
+                RefreshSplitScreenViewports();
+        }
+
+        private void LateUpdate()
+        {
+            if (!_isSecondarySplitRig || _splitCamera == null || !_splitCamera.gameObject.activeSelf) return;
+            if (followTarget == null) return;
+
+            Quaternion rot = Quaternion.Euler(_pitch, _yaw, 0f);
+            Vector3 pivot = followTarget.position + rot * new Vector3(shoulderOffset.x, shoulderOffset.y + verticalArmLength, shoulderOffset.z);
+            Vector3 back = -(rot * Vector3.forward);
+            float dist = _distance;
+            LayerMask mask = BuildCollisionFilter();
+            if (Physics.SphereCast(pivot, cameraRadius, back, out RaycastHit hit, dist, mask, QueryTriggerInteraction.Ignore))
+                dist = Mathf.Max(0.25f, hit.distance - 0.05f);
+
+            _splitCamera.transform.SetPositionAndRotation(pivot + back * dist, rot);
+        }
+
+        private void EnsureSplitCamera()
+        {
+            if (_splitCamera != null) return;
+            int idx = _input != null ? _input.PlayerIndex : 1;
+            var go = new GameObject("SplitCamera_P" + (idx + 1));
+            _splitCamera = go.AddComponent<Camera>();
+            Camera main = Camera.main;
+            if (main != null)
+            {
+                _splitCamera.clearFlags = main.clearFlags;
+                _splitCamera.backgroundColor = main.backgroundColor;
+                _splitCamera.nearClipPlane = main.nearClipPlane;
+                _splitCamera.farClipPlane = main.farClipPlane;
+                _splitCamera.fieldOfView = fieldOfView;
+                var urpType = System.Type.GetType("UnityEngine.Rendering.Universal.UniversalAdditionalCameraData, Unity.RenderPipelines.Universal.Runtime");
+                if (urpType != null)
+                {
+                    var urp = go.GetComponent(urpType) ?? go.AddComponent(urpType);
+                    var renderPost = urpType.GetProperty("renderPostProcessing");
+                    var renderShadows = urpType.GetProperty("renderShadows");
+                    renderPost?.SetValue(urp, true);
+                    renderShadows?.SetValue(urp, true);
+                }
+            }
+        }
+
+        private void SetSecondarySplitActive(bool active, Rect viewportRect)
+        {
+            if (active)
+            {
+                EnsureSplitCamera();
+                if (!_splitCamera.gameObject.activeSelf) _splitCamera.gameObject.SetActive(true);
+                _splitCamera.rect = viewportRect;
+            }
+            else if (_splitCamera != null && _splitCamera.gameObject.activeSelf)
+            {
+                _splitCamera.gameObject.SetActive(false);
+            }
+        }
+
+        private static void RefreshSplitScreenViewports()
+        {
+            Camera main = Camera.main;
+            var allInputs = ElfInput.All;
+            int count = 0;
+            for (int i = 0; i < allInputs.Count; i++)
+                if (allInputs[i] != null && allInputs[i].isActiveAndEnabled && !allInputs[i].IsNetworkRemote) count++;
+
+            bool split = SplitScreenEnabled && count >= 2;
+            if (!split)
+            {
+                if (main != null && main.rect != new Rect(0f, 0f, 1f, 1f))
+                    main.rect = new Rect(0f, 0f, 1f, 1f);
+                for (int i = 0; i < allInputs.Count; i++)
+                {
+                    ElfInput e = allInputs[i];
+                    if (e == null || e.PlayerIndex == 0 || e.IsNetworkRemote) continue;
+                    var rig = e.GetComponent<ThirdPersonCameraRig>();
+                    if (rig != null)
+                    {
+                        rig.SetSecondarySplitActive(false, new Rect(0f, 0f, 1f, 1f));
+                        rig.enabled = false;
+                    }
+                }
+                return;
+            }
+
+            int slot = 0;
+            for (int i = 0; i < allInputs.Count; i++)
+            {
+                ElfInput e = allInputs[i];
+                if (e == null || !e.isActiveAndEnabled || e.IsNetworkRemote) continue;
+                Rect r = ComputeViewportRect(slot, count);
+                if (e.PlayerIndex == 0)
+                {
+                    if (main != null) main.rect = r;
+                }
+                else
+                {
+                    var rig = e.GetComponent<ThirdPersonCameraRig>();
+                    if (rig == null) rig = e.gameObject.AddComponent<ThirdPersonCameraRig>();
+                    if (!rig.enabled) rig.enabled = true;
+                    rig.SetSecondarySplitActive(true, r);
+                }
+                slot++;
+            }
+        }
+
+        private static Rect ComputeViewportRect(int slot, int total)
+        {
+            if (total <= 1) return new Rect(0f, 0f, 1f, 1f);
+            if (total == 2)
+                return slot == 0 ? new Rect(0f, 0f, 0.5f, 1f) : new Rect(0.5f, 0f, 0.5f, 1f);
+            if (total == 3)
+            {
+                if (slot == 0) return new Rect(0f, 0.5f, 0.5f, 0.5f);
+                if (slot == 1) return new Rect(0.5f, 0.5f, 0.5f, 0.5f);
+                return new Rect(0f, 0f, 1f, 0.5f);
+            }
+            return slot switch
+            {
+                0 => new Rect(0f, 0.5f, 0.5f, 0.5f),
+                1 => new Rect(0.5f, 0.5f, 0.5f, 0.5f),
+                2 => new Rect(0f, 0f, 0.5f, 0.5f),
+                _ => new Rect(0.5f, 0f, 0.5f, 0.5f),
+            };
         }
 
         // ---------------- local co-op group framing ----------------
@@ -236,12 +390,12 @@ namespace SilentNight.Player
         // TODO (step 2): optional split-screen (one Camera + CinemachineBrain + channel per player, Camera.rect),
         // CinemachineTargetGroup/GroupFraming for a nicer fit, per-player HUD, Billboard facing the nearest camera.
 
-        /// <summary>Recomputes _grouped/_groupCenter/_groupRadius from GameServices.Players (allocation free).</summary>
+        /// <summary>Recomputes _grouped/_groupCenter/_groupRadius from GameServices.LocalPlayers (allocation free).</summary>
         private void RefreshGroupFrame()
         {
             _grouped = false;
-            if (!groupFraming) return;
-            var players = GameServices.Players;
+            if (!groupFraming || _isSecondarySplitRig || SplitScreenEnabled) return;
+            var players = GameServices.LocalPlayers;
             if (players == null || players.Count < 2) return;
 
             Vector3 sum = Vector3.zero;
@@ -295,9 +449,15 @@ namespace SilentNight.Player
 
             if (!PlayerGate.CanControl) return;
 
-            Vector2 look = PlayerGate.CanMouseLook ? _input.Look : StickOnly();
+            Vector2 look = (!_isSecondarySplitRig && PlayerGate.CanMouseLook) ? _input.Look : StickOnly();
             _yaw += look.x * mouseSensitivity;
             _pitch += (invertY ? look.y : -look.y) * mouseSensitivity;
+            if (_isSecondarySplitRig && look.sqrMagnitude < 0.01f && _controller != null && _controller.PlanarSpeed > 0.4f)
+            {
+                // Gentle auto-follow behind secondary player's movement when they are not manually orbiting.
+                float moveYaw = transform.eulerAngles.y;
+                _yaw = Mathf.LerpAngle(_yaw, moveYaw, 1.8f * Time.unscaledDeltaTime);
+            }
             _pitch = Mathf.Clamp(_pitch, minPitch, maxPitch);
             _yaw = Mathf.Repeat(_yaw, 360f);
 
@@ -320,6 +480,16 @@ namespace SilentNight.Player
         {
             if (followTarget == null) return;
             RefreshGroupFrame();
+
+            bool inMainMenu = GameServices.Flow != null && GameServices.Flow.State == GameState.MainMenu;
+            if (inMainMenu && !_isSecondarySplitRig)
+            {
+                // In main menu: smoothly orbit to the front-right of the elf for character showroom framing
+                float menuYaw = transform.eulerAngles.y + 160f;
+                _yaw = Mathf.LerpAngle(_yaw, menuYaw, 6f * Time.unscaledDeltaTime);
+                _pitch = Mathf.Lerp(_pitch, 8f, 6f * Time.unscaledDeltaTime);
+            }
+
             bool crouch = _controller != null && _controller.IsCrouching;
             float h = crouch ? crouchPivotHeight : pivotHeight;
             Vector3 basePos = _grouped ? _groupCenter : transform.position;

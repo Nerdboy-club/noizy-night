@@ -197,7 +197,7 @@ namespace SilentNight.UI
             ps.name = "SilentNight_RuntimePanelSettings";
             ps.scaleMode = PanelScaleMode.ScaleWithScreenSize;
             ps.referenceResolution = new Vector2Int(1920, 1080);
-            ps.screenMatchMode = PanelScreenMatchMode.MatchWidthOrHeight;
+            ps.screenMatchMode = PanelScreenMatchMode.Expand;
             ps.match = 0.5f;
             ps.sortingOrder = sortingOrder;
             ps.clearColor = false;
@@ -222,7 +222,7 @@ namespace SilentNight.UI
         private void EnsureEventSystem()
         {
             if (UnityEngine.EventSystems.EventSystem.current != null ||
-                FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() != null) return;
+                FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() != null) return;
             var go = new GameObject("EventSystem (UIRoot)");
             go.transform.SetParent(transform, false);
             go.AddComponent<UnityEngine.EventSystems.EventSystem>();

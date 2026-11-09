@@ -38,10 +38,14 @@ namespace SilentNight.Player
         private static readonly List<ElfInput> s_All = new List<ElfInput>(4);
 
         // ---------- co-op identity ----------
-        /// <summary>0 = player 1 (keyboard/mouse + free gamepads), 1..3 = extra local players (own gamepad only).</summary>
+        /// <summary>0 = player 1 (keyboard/mouse + free gamepads), 1..3 = extra local players (own gamepad or secondary keyboard).</summary>
         public int PlayerIndex { get; private set; }
         /// <summary>Player 2+: the gamepad this elf listens to. Player 1: always null.</summary>
         public Gamepad AssignedGamepad { get; private set; }
+        /// <summary>Player 2+: true when controlled by the secondary keyboard bindings (Arrow keys + Enter/RShift/RCtrl).</summary>
+        public bool IsKeyboardSecondary { get; private set; }
+        /// <summary>True when this elf avatar is controlled over the network (Host or Remote Client).</summary>
+        public bool IsNetworkRemote { get; private set; }
         /// <summary>Player 1: the last unclaimed gamepad that actually drove this elf (null = none yet).</summary>
         public Gamepad LastUsedGamepad { get; private set; }
         /// <summary>Player 1: true once keyboard or mouse input reached this elf.</summary>
@@ -100,7 +104,7 @@ namespace SilentNight.Player
         private void Start()
         {
             // Scenes baked before local co-op have no LocalCoopJoin on the elf; player 1 brings it along.
-            if (autoAddCoopJoin && PlayerIndex == 0 && GetComponent<LocalCoopJoin>() == null)
+            if (autoAddCoopJoin && !IsNetworkRemote && PlayerIndex == 0 && GetComponent<LocalCoopJoin>() == null)
                 gameObject.AddComponent<LocalCoopJoin>();
         }
 
@@ -179,16 +183,17 @@ namespace SilentNight.Player
         private void OnDestroy()
         {
             s_All.Remove(this);
-            bool hadPad = AssignedGamepad != null;
+            bool hadPad = AssignedGamepad != null || IsKeyboardSecondary;
             AssignedGamepad = null;
-            if (hadPad) RefreshPrimaryFilters(); // player 1 gets this pad back
+            IsKeyboardSecondary = false;
+            if (hadPad) RefreshPrimaryFilters(); // player 1 gets this pad/arrows back
 
             if (!_created) return;
             _map.Dispose();
             _created = false;
         }
 
-        private bool CanEnableActions => PlayerIndex == 0 || AssignedGamepad != null;
+        private bool CanEnableActions => !IsNetworkRemote && (PlayerIndex == 0 || AssignedGamepad != null || IsKeyboardSecondary);
 
         private void SetActionsEnabled(bool on)
         {
@@ -208,11 +213,110 @@ namespace SilentNight.Player
             CreateActions();
             PlayerIndex = Mathf.Max(0, index);
             AssignedGamepad = PlayerIndex == 0 ? null : gamepad;
+            IsKeyboardSecondary = false;
             // The button press that made this player join must not also jump / pause on the first frames.
             SuppressPresses(1);
             ApplyDeviceFilter();
             SetActionsEnabled(isActiveAndEnabled);
             RefreshPrimaryFilters();
+        }
+
+        /// <summary>
+        /// Assigns this elf (index 1..3) to the secondary keyboard layout: Arrow keys / Numpad for movement,
+        /// Enter (Interact), RightShift / Numpad0 (Jump), RightCtrl (Sprint), RightAlt / Slash (Crouch),
+        /// Backspace / NumpadPlus (Sack), Period (Catnip), IJKL (Camera Look).
+        /// </summary>
+        public void AssignKeyboardPlayer(int index)
+        {
+            if (_created)
+            {
+                _map.Dispose();
+                _created = false;
+            }
+            PlayerIndex = Mathf.Max(1, index);
+            AssignedGamepad = null;
+            IsKeyboardSecondary = true;
+            CreateKeyboardSecondaryActions();
+            SuppressPresses(1);
+            ApplyDeviceFilter();
+            SetActionsEnabled(isActiveAndEnabled);
+            RefreshPrimaryFilters();
+        }
+
+        /// <summary>Assigns this elf as a network-replicated avatar (disables local input devices).</summary>
+        public void AssignNetworkRemotePlayer(int index)
+        {
+            PlayerIndex = Mathf.Max(0, index);
+            AssignedGamepad = null;
+            IsKeyboardSecondary = false;
+            IsNetworkRemote = true;
+            SetActionsEnabled(false);
+            ClearFrame();
+            Move = Vector2.zero;
+        }
+
+        private void CreateKeyboardSecondaryActions()
+        {
+            _created = true;
+            _map = new InputActionMap("Elf_KeyboardP2");
+
+            _move = _map.AddAction("Move", InputActionType.Value, expectedControlLayout: "Vector2");
+            _move.AddCompositeBinding("2DVector")
+                .With("Up", "<Keyboard>/upArrow")
+                .With("Down", "<Keyboard>/downArrow")
+                .With("Left", "<Keyboard>/leftArrow")
+                .With("Right", "<Keyboard>/rightArrow");
+            _move.AddCompositeBinding("2DVector")
+                .With("Up", "<Keyboard>/numpad8")
+                .With("Down", "<Keyboard>/numpad5")
+                .With("Left", "<Keyboard>/numpad4")
+                .With("Right", "<Keyboard>/numpad6");
+
+            _lookMouse = _map.AddAction("LookMouse", InputActionType.Value, expectedControlLayout: "Vector2");
+            _lookStick = _map.AddAction("LookStick", InputActionType.Value, expectedControlLayout: "Vector2");
+            _lookStick.AddCompositeBinding("2DVector")
+                .With("Up", "<Keyboard>/i")
+                .With("Down", "<Keyboard>/k")
+                .With("Left", "<Keyboard>/j")
+                .With("Right", "<Keyboard>/l");
+
+            _jump = _map.AddAction("Jump", InputActionType.Button, "<Keyboard>/rightShift");
+            _jump.AddBinding("<Keyboard>/numpad0");
+
+            _sprint = _map.AddAction("Sprint", InputActionType.Button, "<Keyboard>/rightCtrl");
+            _sprint.AddBinding("<Keyboard>/numpadMultiply");
+
+            _crouch = _map.AddAction("Crouch", InputActionType.Button, "<Keyboard>/rightAlt");
+            _crouch.AddBinding("<Keyboard>/slash");
+
+            _interact = _map.AddAction("Interact", InputActionType.Button, "<Keyboard>/enter");
+            _interact.AddBinding("<Keyboard>/numpadEnter");
+
+            _sack = _map.AddAction("Sack", InputActionType.Button, "<Keyboard>/backspace");
+            _sack.AddBinding("<Keyboard>/numpadPlus");
+
+            _jetpack = _map.AddAction("Jetpack", InputActionType.Button, "<Keyboard>/backslash");
+            _jetpack.AddBinding("<Keyboard>/numpadMinus");
+
+            _cameraToggle = _map.AddAction("CameraToggle", InputActionType.Button, "<Keyboard>/comma");
+            _pause = _map.AddAction("Pause", InputActionType.Button, "<Keyboard>/escape");
+            _zoom = _map.AddAction("Zoom", InputActionType.Value, expectedControlLayout: "Axis");
+
+            _catnip = _map.AddAction("Catnip", InputActionType.Button, "<Keyboard>/period");
+            _catnip.AddBinding("<Keyboard>/numpadPeriod");
+
+            _claimScan = new InputAction[0];
+        }
+
+        /// <summary>True if a player 2+ is currently using the secondary keyboard layout (Arrow keys).</summary>
+        public static bool AnyKeyboardSecondaryClaimed()
+        {
+            for (int i = 0; i < s_All.Count; i++)
+            {
+                ElfInput e = s_All[i];
+                if (e != null && e.PlayerIndex > 0 && e.IsKeyboardSecondary) return true;
+            }
+            return false;
         }
 
         /// <summary>Ignore "pressed this frame" values for the current frame and the next <paramref name="extraFrames"/>.</summary>
@@ -239,7 +343,7 @@ namespace SilentNight.Player
             get
             {
                 for (int i = 0; i < s_All.Count; i++)
-                    if (s_All[i] != null && s_All[i].PlayerIndex == 0) return s_All[i];
+                    if (s_All[i] != null && !s_All[i].IsNetworkRemote && s_All[i].PlayerIndex == 0) return s_All[i];
                 return null;
             }
         }
@@ -269,6 +373,15 @@ namespace SilentNight.Player
 
             if (PlayerIndex > 0)
             {
+                if (IsKeyboardSecondary)
+                {
+                    if (Keyboard.current != null)
+                    {
+                        _map.devices = new ReadOnlyArray<InputDevice>(new InputDevice[] { Keyboard.current });
+                        _filterApplied = true;
+                    }
+                    return;
+                }
                 if (AssignedGamepad != null)
                 {
                     _map.devices = new ReadOnlyArray<InputDevice>(new InputDevice[] { AssignedGamepad });
@@ -328,11 +441,39 @@ namespace SilentNight.Player
 
         private void Update()
         {
+            if (IsNetworkRemote)
+            {
+                ClearFrame();
+                Move = Vector2.zero;
+                JumpHeld = SprintHeld = JetpackHeld = InteractHeld = false;
+                return;
+            }
             if (!_created) return;
             bool primary = PlayerIndex == 0;
 
             Vector2? moveOverride = primary ? DebugMoveOverride : null;
-            Move = moveOverride ?? Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
+            if (moveOverride.HasValue)
+            {
+                Move = moveOverride.Value;
+            }
+            else if (primary && AnyKeyboardSecondaryClaimed() && Keyboard.current != null)
+            {
+                // When Keyboard P2 owns Arrow keys, Player 1 only reads WASD + unclaimed gamepads for movement.
+                var kb = Keyboard.current;
+                Vector2 wasd = new Vector2(
+                    (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f),
+                    (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f));
+                if (LastUsedGamepad != null && !IsGamepadClaimed(LastUsedGamepad))
+                {
+                    Vector2 stick = LastUsedGamepad.leftStick.ReadValue();
+                    if (stick.sqrMagnitude > wasd.sqrMagnitude) wasd = stick;
+                }
+                Move = Vector2.ClampMagnitude(wasd, 1f);
+            }
+            else
+            {
+                Move = Vector2.ClampMagnitude(_move.ReadValue<Vector2>(), 1f);
+            }
             LookMouse = _lookMouse.ReadValue<Vector2>();
             LookStick = _lookStick.ReadValue<Vector2>();
             Look = LookMouse + LookStick * (stickLookPixelsPerSecond * Time.unscaledDeltaTime);
@@ -366,6 +507,8 @@ namespace SilentNight.Player
         /// <summary>Player 1: remember which gamepad (if any) and whether keyboard/mouse are really in use.</summary>
         private void TrackPrimaryDevices()
         {
+            if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame)
+                HasUsedKeyboardMouse = true;
             for (int i = 0; i < _claimScan.Length; i++)
             {
                 InputControl c = _claimScan[i].activeControl;

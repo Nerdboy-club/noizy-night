@@ -229,7 +229,10 @@ namespace SilentNight.Player
         private State EvaluateState()
         {
             if (!isActiveAndEnabled) return State.Hidden;
-            if (GameServices.Players.Count <= 1) return State.Hidden;
+            bool isCoop = GameServices.Players.Count > 1 ||
+                          (SilentNight.Multiplayer.CoopNetworkManager.Instance != null &&
+                           SilentNight.Multiplayer.CoopNetworkManager.Instance.Role != SilentNight.Multiplayer.CoopNetworkManager.NetRole.Offline);
+            if (!isCoop) return State.Hidden;
             if (_ragdoll == null || _carry == null || _input == null || _visual == null) CacheComponents();
             if (_ragdoll != null && _ragdoll.IsDowned) return State.Downed;
             if (_carry != null && _carry.IsCoCarrying) return State.CoCarry;
@@ -241,6 +244,7 @@ namespace SilentNight.Player
         {
             int idx = _input != null ? _input.PlayerIndex : 0;
             int theme = _visual != null ? _visual.ThemeIndex : 0;
+            if (idx == 0 && theme > 0 && _input != null && !_input.IsNetworkRemote) idx = theme;
             if (idx == _shownPlayerIndex && theme == _shownTheme) return;
             _shownPlayerIndex = idx;
             _shownTheme = theme;

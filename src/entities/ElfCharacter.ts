@@ -70,6 +70,29 @@ export class ElfCharacter {
   private physics: PhysicsWorld;
   private slipVelocity: THREE.Vector2 = new THREE.Vector2(0, 0);
 
+  // --- Game feel: прыжок, приземление, сжатие/растяжение, пыль, вторичное движение ---
+  private scene: THREE.Scene;
+  private coyoteTimer = 0;
+  private jumpBuffer = 0;
+  private prevSpace = false;
+  private prevGrounded = false;
+  private lastVy = 0;
+  private squash = 0; // >0 сплющен, <0 растянут
+  private squashVel = 0;
+  private crouchScale = 1;
+  private leanX = 0;
+  private leanZ = 0;
+  private prevHeading = 0;
+  private pomOffset = new THREE.Vector2(0, 0);
+  private pomVel = new THREE.Vector2(0, 0);
+  private sackSway = 0;
+  private sackSwayVel = 0;
+  private time = 0;
+  /** Толчок камеры вниз при жёстком приземлении (читает main.ts). */
+  public cameraKick = 0;
+  private dust: { mesh: THREE.Mesh; vel: THREE.Vector3; life: number; maxLife: number; size: number }[] = [];
+  private dustGeo = new THREE.SphereGeometry(1, 8, 6);
+
   private keys: Record<string, boolean> = {};
 
   constructor(
@@ -80,6 +103,7 @@ export class ElfCharacter {
     playerIndex: number = 0,
     isLocalPlayer: boolean = true
   ) {
+    this.scene = scene;
     this.playerIndex = playerIndex;
     this.isLocalPlayer = isLocalPlayer;
     this.physics = physics;
@@ -100,6 +124,7 @@ export class ElfCharacter {
     this.sackMesh = built.sackMesh;
     this.jetpackGroup = built.jetpackGroup;
     this.jetpackFlames = built.jetpackFlames;
+    this.mesh.rotation.order = 'YXZ';
     scene.add(this.mesh);
 
     // Автоподгрузка пользовательской 3D модели из public/models/elf.glb, если она есть
@@ -484,6 +509,50 @@ export class ElfCharacter {
     this.jetpackGroup.visible = this.jetpackLevel > 0;
   }
 
+  private dampAngle(cur: number, target: number, rate: number, dt: number) {
+    const d = ((((target - cur + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
+    return cur + d * (1 - Math.exp(-rate * dt));
+  }
+
+  private spawnDust(count: number, spread: number, up: number, color: number, size = 0.07) {
+    const p = this.body.translation();
+    for (let i = 0; i < count; i++) {
+      let d = this.dust.find((q) => q.life <= 0);
+      if (!d) {
+        if (this.dust.length >= 36) return;
+        const m = new THREE.Mesh(this.dustGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+        this.scene.add(m);
+        d = { mesh: m, vel: new THREE.Vector3(), life: 0, maxLife: 0.5, size };
+        this.dust.push(d);
+      }
+      const a = Math.random() * Math.PI * 2;
+      const sp = spread * (0.4 + Math.random() * 0.8);
+      d.vel.set(Math.cos(a) * sp, up * (0.6 + Math.random() * 0.8), Math.sin(a) * sp);
+      d.mesh.position.set(p.x + Math.cos(a) * 0.15, p.y - 0.42, p.z + Math.sin(a) * 0.15);
+      (d.mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
+      d.life = d.maxLife = 0.4 + Math.random() * 0.25;
+      d.size = size * (0.7 + Math.random() * 0.7);
+      d.mesh.visible = true;
+    }
+  }
+
+  private updateDust(dt: number) {
+    for (const d of this.dust) {
+      if (d.life <= 0) continue;
+      d.life -= dt;
+      if (d.life <= 0) {
+        d.mesh.visible = false;
+        continue;
+      }
+      d.vel.y -= 4 * dt;
+      d.vel.multiplyScalar(Math.exp(-3 * dt));
+      d.mesh.position.addScaledVector(d.vel, dt);
+      const t = d.life / d.maxLife;
+      d.mesh.scale.setScalar(d.size * (1.6 - t * 0.9));
+      (d.mesh.material as THREE.MeshBasicMaterial).opacity = t * 0.7;
+    }
+  }
+
   public update(
     delta: number,
     cameraAngleY: number,
@@ -492,8 +561,11 @@ export class ElfCharacter {
     currentNoise: number = 10
   ): { noiseGenerated: number; moved: boolean } {
     let noiseLevel = 0;
+    const dt = Math.min(delta, 0.05);
+    this.time += dt;
 
     this.updateVisualGadgets();
+    this.updateDust(dt);
 
     // Учет веса подарка в руках + легкий вес мешка за спиной
     const handMultiplier = this.carriedGift ? this.carriedGift.getCarrySpeedMultiplier(this.gripLevel) : 1.0;
@@ -595,13 +667,16 @@ export class ElfCharacter {
       const targetVx = Math.sin(moveAngle) * speed;
       const targetVz = Math.cos(moveAngle) * speed;
 
-      this.slipVelocity.x = THREE.MathUtils.lerp(this.slipVelocity.x, targetVx, lerpFactor);
-      this.slipVelocity.y = THREE.MathUtils.lerp(this.slipVelocity.y, targetVz, lerpFactor);
+      // Разгон не зависит от FPS; в воздухе управление слабее
+      const accelRate = -Math.log(1 - lerpFactor) * 60 * (this.isGrounded ? 1 : 0.45);
+      const ka = 1 - Math.exp(-accelRate * dt);
+      this.slipVelocity.x += (targetVx - this.slipVelocity.x) * ka;
+      this.slipVelocity.y += (targetVz - this.slipVelocity.y) * ka;
 
       const linVel = this.body.linvel();
       this.body.setLinvel({ x: this.slipVelocity.x, y: linVel.y, z: this.slipVelocity.y }, true);
 
-      this.mesh.rotation.y = THREE.MathUtils.lerp(this.mesh.rotation.y, moveAngle, 0.22);
+      this.mesh.rotation.y = this.dampAngle(this.mesh.rotation.y, moveAngle, 14, dt);
 
       const wobbleFrequency = handMultiplier < 0.5 ? 7 : this.isCrouching ? 8 : 15;
       this.walkCycle += delta * wobbleFrequency;
@@ -631,7 +706,6 @@ export class ElfCharacter {
 
       this.head.rotation.z = Math.sin(this.walkCycle * 0.5) * (isHeavyStrain ? 0.25 : 0.12);
       this.head.rotation.x = isHeavyStrain ? -0.18 : 0;
-      this.hatPomPom.position.x = Math.sin(this.walkCycle) * 0.035;
 
       // Шаги и шум (учитываем уровень прокачки Бесшумной Обуви!)
       this.stepTimer += delta;
@@ -672,34 +746,113 @@ export class ElfCharacter {
       this.head.rotation.x = THREE.MathUtils.lerp(this.head.rotation.x, 0, 0.15);
 
       const stopDecel = isSlipperySurface ? Math.min(0.96, 0.94 - this.silentBootsLevel * 0.04) : 0.72;
-      this.slipVelocity.multiplyScalar(stopDecel);
+      this.slipVelocity.multiplyScalar(Math.exp(Math.log(stopDecel) * 60 * dt * (this.isGrounded ? 1 : 0.25)));
       const linVel = this.body.linvel();
       this.body.setLinvel({ x: this.slipVelocity.x, y: linVel.y, z: this.slipVelocity.y }, true);
     }
 
-    // Прыжок
-    if (this.isLocalPlayer && this.keys['Space'] && (this.isGrounded || this.isClimbing)) {
+    // Прыжок: буфер нажатия + койот-тайм + переменная высота
+    const spaceDown = this.isLocalPlayer && !!this.keys['Space'];
+    if (spaceDown && !this.prevSpace) this.jumpBuffer = 0.14;
+    this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+    this.coyoteTimer = this.isGrounded ? 0.11 : Math.max(0, this.coyoteTimer - dt);
+
+    if (this.jumpBuffer > 0 && (this.coyoteTimer > 0 || this.isClimbing)) {
       const jumpImpulse = handMultiplier < 0.5 ? 4.8 : 7.6;
       const linVel = this.body.linvel();
       this.body.setLinvel({ x: linVel.x, y: jumpImpulse, z: linVel.z }, true);
       this.isClimbing = false;
+      this.jumpBuffer = 0;
+      this.coyoteTimer = 0;
+      this.squash = Math.max(this.squash, 0.22); // присесть перед прыжком...
+      this.squashVel = -3.2; // ...и сразу растянуться
+      this.spawnDust(5, 1.1, 0.6, surfaceType === 'snow' ? 0xf5f9ff : 0xd8c8a8);
       this.soundEngine.playFootstep('snow');
       const bootNoiseReduction = Math.min(0.75, this.silentBootsLevel * 0.15);
       noiseLevel = Math.max(noiseLevel, Math.round(42 * (1 - bootNoiseReduction)));
+    } else if (!spaceDown && this.prevSpace) {
+      // Отпустили пробел раньше — короткий прыжок
+      const lv = this.body.linvel();
+      if (lv.y > 2.5) this.body.setLinvel({ x: lv.x, y: lv.y * 0.55, z: lv.z }, true);
+    }
+    this.prevSpace = spaceDown;
+
+    // Приземление: сплющивание, пыль, толчок камеры
+    if (this.isGrounded && !this.prevGrounded && this.lastVy < -3.5) {
+      const impact = Math.min(1, (-this.lastVy - 3.5) / 9);
+      this.squash = Math.max(this.squash, 0.12 + impact * 0.3);
+      this.squashVel = 0;
+      this.cameraKick = Math.max(this.cameraKick, 0.05 + impact * 0.22);
+      this.spawnDust(4 + Math.round(impact * 6), 1.4 + impact * 1.4, 0.7, surfaceType === 'snow' ? 0xf5f9ff : 0xd8c8a8, 0.08);
+      this.soundEngine.playThud(0.25 + impact * 0.5);
+      if (impact > 0.45) noiseLevel = Math.max(noiseLevel, Math.round(22 + impact * 30));
+    }
+    this.prevGrounded = this.isGrounded;
+    this.cameraKick = Math.max(0, this.cameraKick - dt * 1.6);
+
+    // Приседание + сжатие/растяжение (пружина) + дыхание
+    const targetScaleY = this.isCrouching ? 0.65 : 1.0;
+    this.crouchScale = THREE.MathUtils.lerp(this.crouchScale, targetScaleY, 1 - Math.exp(-14 * dt));
+
+    const velNow = this.body.linvel();
+    const airborne = !this.isGrounded && !this.isClimbing;
+    const squashTarget = airborne ? -Math.min(0.2, Math.abs(velNow.y) * 0.02) : 0;
+    this.squashVel += (-220 * (this.squash - squashTarget) - 17 * this.squashVel) * dt;
+    this.squash += this.squashVel * dt;
+    const breathe = !isMoving && this.isGrounded ? Math.sin(this.time * 2.2 + this.playerIndex) * 0.012 : 0;
+    const sq = this.squash + breathe;
+    this.mesh.scale.set(1 + sq * 0.55, this.crouchScale * (1 - sq), 1 + sq * 0.55);
+
+    // Наклон корпуса по скорости и разворотам, покачивание помпона и мешка
+    const heading = this.mesh.rotation.y;
+    const fwdSpeed = velNow.x * Math.sin(heading) + velNow.z * Math.cos(heading);
+    const sideSpeed = velNow.x * Math.cos(heading) - velNow.z * Math.sin(heading);
+    const turnRate =
+      dt > 0 ? ((((heading - this.prevHeading + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) - Math.PI) / dt : 0;
+    this.prevHeading = heading;
+    const leanXTarget = this.isClimbing ? 0 : THREE.MathUtils.clamp(fwdSpeed * 0.04, -0.2, 0.32);
+    const leanZTarget = this.isClimbing ? 0 : THREE.MathUtils.clamp(-turnRate * 0.03 + sideSpeed * 0.03, -0.3, 0.3);
+    const kl = 1 - Math.exp(-12 * dt);
+    this.leanX += (leanXTarget - this.leanX) * kl;
+    this.leanZ += (leanZTarget - this.leanZ) * kl;
+    this.mesh.rotation.x = this.leanX;
+    this.mesh.rotation.z = this.leanZ;
+
+    // Помпон на шапке: пружина, отстаёт от движения
+    const pomTx = -sideSpeed * 0.012;
+    const pomTz = -fwdSpeed * 0.012 - velNow.y * 0.004;
+    this.pomVel.x += (-120 * (this.pomOffset.x - pomTx) - 9 * this.pomVel.x) * dt;
+    this.pomVel.y += (-120 * (this.pomOffset.y - pomTz) - 9 * this.pomVel.y) * dt;
+    this.pomOffset.addScaledVector(this.pomVel, dt);
+    this.pomOffset.x = THREE.MathUtils.clamp(this.pomOffset.x, -0.12, 0.12);
+    this.pomOffset.y = THREE.MathUtils.clamp(this.pomOffset.y, -0.12, 0.12);
+    this.hatPomPom.position.x = this.pomOffset.x;
+    this.hatPomPom.position.z = this.pomOffset.y;
+
+    // Мешок за спиной качается маятником
+    this.sackSwayVel += (-60 * (this.sackSway + fwdSpeed * 0.05) - 6 * this.sackSwayVel) * dt;
+    this.sackSway += this.sackSwayVel * dt;
+    this.sackMesh.rotation.x = THREE.MathUtils.clamp(this.sackSway, -0.5, 0.5);
+
+    // Шаговая пыль и подпрыгивание тела при ходьбе
+    const walking = isMoving && this.isGrounded && !this.isClimbing;
+    const stepBob = walking ? Math.abs(Math.sin(this.walkCycle)) * 0.035 : 0;
+    if (walking && !this.isCrouching && this.stepTimer < dt && !isSlipperySurface) {
+      this.spawnDust(1, 0.5, 0.3, surfaceType === 'snow' ? 0xf5f9ff : 0xd8c8a8, 0.05);
+    } else if (walking && isSlipperySurface && Math.hypot(this.slipVelocity.x, this.slipVelocity.y) > 3 && Math.random() < 0.3) {
+      this.spawnDust(1, 0.3, 0.2, 0xbfe6ff, 0.04);
     }
 
-    // Приседание
-    const targetScaleY = this.isCrouching ? 0.65 : 1.0;
-    this.mesh.scale.y = THREE.MathUtils.lerp(this.mesh.scale.y, targetScaleY, 0.2);
-
     const currentPos = this.body.translation();
-    this.mesh.position.set(currentPos.x, currentPos.y - 0.45 * this.mesh.scale.y, currentPos.z);
+    this.mesh.position.set(currentPos.x, currentPos.y - 0.45 * this.mesh.scale.y + stepBob, currentPos.z);
+    this.lastVy = velNow.y;
 
     this.heldGiftMesh.visible = this.isHoldingGift && !this.carriedGift;
 
     // Физическое удержание подарка в руках перед эльфом (разворачивается вместе с эльфом!)
     if (this.carriedGift) {
-      const elfForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
+      const headingQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+      const elfForward = new THREE.Vector3(0, 0, 1).applyQuaternion(headingQuat);
       const distAhead = this.carriedGift.type === 'HUGE' ? 1.05 : 0.58;
       const heightOffset = this.carriedGift.type === 'HUGE' ? 0.68 : 0.55;
       const targetGiftPos = this.mesh.position
@@ -711,10 +864,10 @@ export class ElfCharacter {
       this.carriedGift.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       this.carriedGift.body.setRotation(
         {
-          x: this.mesh.quaternion.x,
-          y: this.mesh.quaternion.y,
-          z: this.mesh.quaternion.z,
-          w: this.mesh.quaternion.w
+          x: headingQuat.x,
+          y: headingQuat.y,
+          z: headingQuat.z,
+          w: headingQuat.w
         },
         true
       );

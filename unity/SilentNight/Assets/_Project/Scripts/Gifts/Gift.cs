@@ -73,10 +73,44 @@ namespace SilentNight.Gifts
         public float Integrity => integrity;
 
         // ---------------- state ----------------
+        public int NetworkId { get; set; } = -1;
         public bool IsHeld { get; private set; }
         public bool IsInSack { get; private set; }
         public bool IsDelivered { get; private set; }
         public bool IsBroken { get; private set; }
+
+        private static readonly Dictionary<int, Gift> s_byNetId = new Dictionary<int, Gift>();
+
+        public static Gift FindByNetId(int id)
+        {
+            if (id < 0) return null;
+            return s_byNetId.TryGetValue(id, out var g) ? g : null;
+        }
+
+        public static void RegisterNetId(Gift g, int id)
+        {
+            if (g == null || id < 0) return;
+            g.NetworkId = id;
+            s_byNetId[id] = g;
+        }
+
+        public static void UnregisterNetId(Gift g)
+        {
+            if (g == null || g.NetworkId < 0) return;
+            if (s_byNetId.TryGetValue(g.NetworkId, out var existing) && existing == g)
+                s_byNetId.Remove(g.NetworkId);
+        }
+
+        private void OnDestroy()
+        {
+            UnregisterNetId(this);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetGiftStatics()
+        {
+            s_byNetId.Clear();
+        }
         /// <summary>Seconds until the music box rings (Noisy only).</summary>
         public float WindLeft => _windLeft;
         /// <summary>Player-facing name (Russian).</summary>

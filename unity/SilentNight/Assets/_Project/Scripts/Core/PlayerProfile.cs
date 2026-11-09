@@ -16,6 +16,7 @@ namespace SilentNight.Core
 
         public int Tips = 120;
         public int CompletedRuns;
+        public int SelectedSkin = 0;
         public int JetpackLevel;      // 0 = no jetpack
         public int SilentBootsLevel;  // reduces footstep noise and slipping
         public int SackLevel;         // capacity = 1 + SackLevel
@@ -78,6 +79,38 @@ namespace SilentNight.Core
             NotifyChanged();
             Save();
             return true;
+        }
+
+        public static readonly string[] SkinNames =
+        {
+            "Классик (Зелёный эльф)",
+            "Скаут (Красный эльф)",
+            "Механик (Синий эльф)",
+            "Траппер (Шапка-ушанка)",
+            "Эльфийка (Сумочка London)"
+        };
+
+        public static readonly string[] SkinDescriptions =
+        {
+            "Традиционный зелёный костюм мастера игрушек Северного Полюса.",
+            "Ярко-красный тёплый свитер. Бесшумный разведчик крыш.",
+            "Синий рабочий комбинезон механика волшебных саней Санты.",
+            "Зимний фиолетовый пуховик и меховая шапка-ушанка от метелей.",
+            "Модная эльфийка с бордовым каре и кроссбоди сумочкой London."
+        };
+
+        public void SetSkin(int index)
+        {
+            SelectedSkin = Mathf.Clamp(index, 0, SkinNames.Length - 1);
+            NotifyChanged();
+            Save();
+        }
+
+        public void CycleSkin(int delta)
+        {
+            int next = (SelectedSkin + delta) % SkinNames.Length;
+            if (next < 0) next += SkinNames.Length;
+            SetSkin(next);
         }
 
         public void AddTips(int amount)

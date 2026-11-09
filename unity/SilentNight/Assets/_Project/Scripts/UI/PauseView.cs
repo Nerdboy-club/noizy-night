@@ -19,7 +19,8 @@ namespace SilentNight.UI
             UIFactory.Text("ПАУЗА", "sn-dialog__ribbon", _dialog);
             var col = UIFactory.El("sn-dialog__buttons", _dialog);
             UIFactory.Btn("Продолжить", () => GameServices.Flow?.TogglePause(), "sn-btn--green sn-btn--big", col);
-            _giveUp = UIFactory.Btn("Сдаться — на базу", () => GameEvents.RaiseRequestReturnToHub(), "sn-btn--wood", col);
+            UIFactory.Btn("Сетевой кооп [F4]", () => SilentNight.Multiplayer.CoopNetworkManager.ToggleWindow(), "sn-btn--wood", col);
+            _giveUp = UIFactory.Btn("Сдаться — на базу", () => SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedReturnToHub(true), "sn-btn--wood", col);
             UIFactory.Btn("Выход", OnQuit, "sn-btn--red", col);
             UIFactory.Text("Esc — продолжить", "sn-dialog__hint", _dialog);
             return root;

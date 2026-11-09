@@ -9,6 +9,7 @@ namespace SilentNight.UI
         private const string DefaultReason = "Ворчливый Дед заметил вас и прогнал обратно в камин!";
 
         private VisualElement _dialog;
+        private AlertEyeElement _eye;
         private Label _reason;
         private string _lastReason = DefaultReason;
 
@@ -19,11 +20,11 @@ namespace SilentNight.UI
             var root = UIFactory.El("sn-backdrop sn-backdrop--red");
             _dialog = UIFactory.El("sn-dialog sn-dialog--red", root);
             UIFactory.Text("РЕЙС СОРВАН!", "sn-dialog__ribbon sn-dialog__ribbon--red", _dialog);
-            var eye = new AlertEyeElement { Level = AlertLevel.Chasing };
-            eye.AddToClassList("sn-eye--big");
-            _dialog.Add(eye);
+            _eye = new AlertEyeElement { Level = AlertLevel.Chasing };
+            _eye.AddToClassList("sn-eye--big");
+            _dialog.Add(_eye);
             _reason = UIFactory.Text(DefaultReason, "sn-dialog__text", _dialog);
-            UIFactory.Btn("На базу", () => GameEvents.RaiseRequestReturnToHub(), "sn-btn--red sn-btn--big", _dialog);
+            UIFactory.Btn("На базу", () => SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedReturnToHub(true), "sn-btn--red sn-btn--big", _dialog);
             return root;
         }
 
@@ -38,7 +39,15 @@ namespace SilentNight.UI
             if (_reason != null) _reason.text = _lastReason;
         }
 
-        protected override void OnShow() => _reason.text = _lastReason;
+        protected override void OnShow()
+        {
+            _reason.text = _lastReason;
+            if (_eye != null)
+            {
+                _eye.AddToClassList("sn-bump");
+                _eye.schedule.Execute(() => _eye.RemoveFromClassList("sn-bump")).StartingIn(200);
+            }
+        }
 
         protected override void OnHide() => _lastReason = DefaultReason;
     }

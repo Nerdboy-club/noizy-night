@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { loadProp } from '../loaders/ModelLoader';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { SoundEngine } from '../audio/SoundEngine';
 import { GiftItem, GiftType } from '../entities/GiftItem';
@@ -158,6 +159,7 @@ export class ApartmentLevel {
     this.buildInteractiveObjects();
     this.buildDecor();
     this.spawnGifts(['SMALL', 'NOISY', 'HUGE']);
+    void this.applyModels();
 
     this.group.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -578,6 +580,53 @@ export class ApartmentLevel {
     this.group.add(hearthGlow);
   }
 
+  private treeGroupRef?: THREE.Group;
+  private fireplaceGroupRef?: THREE.Group;
+
+  /** Подменяет процедурные модели вашими Tripo-моделями и расставляет Kenney-мебель. Если файла нет — остаётся процедурка. */
+  private async applyModels() {
+    const hideMeshes = (g: THREE.Object3D, keep: Set<THREE.Object3D>) =>
+      g.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && !keep.has(o)) o.visible = false;
+      });
+
+    const tree = await loadProp('/models/props/tree.glb', { height: 4.3 });
+    if (tree && this.treeGroupRef) {
+      hideMeshes(this.treeGroupRef, new Set());
+      tree.position.copy(this.treePosition);
+      this.group.add(tree);
+    }
+
+    const fp = await loadProp('/models/props/fireplace.glb', { height: 4.4 });
+    if (fp && this.fireplaceGroupRef) {
+      const keep = new Set<THREE.Object3D>([...this.fireFlames]);
+      if (this.exitRingMesh) keep.add(this.exitRingMesh);
+      hideMeshes(this.fireplaceGroupRef, keep);
+      fp.position.copy(this.fireplacePosition).add(new THREE.Vector3(0, 0, -0.2));
+      this.group.add(fp);
+    }
+
+    const place = async (file: string, x: number, z: number, h: number, rotY = 0, restyle = false) => {
+      const m = await loadProp('/models/props/' + file, { height: h, rotY, restyle, outline: false });
+      if (m) {
+        m.position.set(x, 0, z);
+        this.group.add(m);
+      }
+    };
+    // Ёлочные игрушки (ваши Tripo-модели) под ёлкой
+    await place('ornamentA.glb', 4.0, -3.7, 0.4, 0.4);
+    await place('ornamentB.glb', 7.1, -3.9, 0.4, 1.2);
+    await place('ornamentC.glb', 3.6, -7.3, 0.4, 2.0);
+    // Мебель Kenney (CC0) вдоль внешних стен
+    await place('k_bookcaseClosed.fbx', -11.5, -2.0, 2.0, Math.PI / 2, true);
+    await place('k_cabinetTelevision.fbx', 11.5, -1.0, 0.8, -Math.PI / 2, true);
+    await place('k_pottedPlant.fbx', 11.2, 10.0, 1.2, 0, true);
+    await place('k_lampRoundFloor.fbx', -11.2, 9.8, 1.6, 0, true);
+    await place('k_bear.fbx', 1.4, 2.6, 0.5, 0.6, true);
+    await place('k_cardboardBoxClosed.fbx', -11.0, -9.5, 0.6, 0.3, true);
+    await place('k_trashcan.fbx', 11.3, -10.0, 0.6, 0, true);
+  }
+
   private buildFireplace() {
     const R = this.physics.getRapier();
     const brickMat = createBrickMaterial(0x9a3412);
@@ -686,6 +735,7 @@ export class ApartmentLevel {
     this.fireLight.castShadow = false;
     fireplaceGroup.add(this.fireLight);
 
+    this.fireplaceGroupRef = fireplaceGroup;
     this.group.add(fireplaceGroup);
 
     const body = this.physics.world.createRigidBody(
@@ -840,6 +890,7 @@ export class ApartmentLevel {
     dropZone.position.set(0.5, 0.075, 1.4);
     treeGroup.add(dropZone);
 
+    this.treeGroupRef = treeGroup;
     this.group.add(treeGroup);
 
     const R = this.physics.getRapier();
@@ -1050,6 +1101,25 @@ export class ApartmentLevel {
       this.addStaticCollider(R.ColliderDesc.cuboid(0.13, 0.13, 0.13).setMass(0.25), cubeBody);
       this.interactiveObjects.push({ mesh: cubeMesh, body: cubeBody });
     }
+
+    // Упругие ёлочные шары: катятся, отскакивают, их можно толкать и пинать
+    const ballColors = [0xdc2626, 0x2563eb, 0xfbbf24];
+    ballColors.forEach((col, i) => {
+      const r = 0.14;
+      const bx = -0.9 + i * 0.6, bz = 3.1 + (i % 2) * 0.3;
+      const ballMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 20, 16),
+        new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.25, metalness: 0.2, clearcoat: 0.9 })
+      );
+      ballMesh.castShadow = true;
+      ballMesh.position.set(bx, r + 0.02, bz);
+      this.group.add(ballMesh);
+      const ballBody = this.physics.world.createRigidBody(
+        R.RigidBodyDesc.dynamic().setTranslation(bx, r + 0.02, bz).setLinearDamping(0.4).setAngularDamping(0.5)
+      );
+      this.addStaticCollider(R.ColliderDesc.ball(r).setMass(0.2).setRestitution(0.75).setFriction(0.4), ballBody);
+      this.interactiveObjects.push({ mesh: ballMesh, body: ballBody });
+    });
 
     // Крупные блестящие латунные бубенчики на полу (референс №3)
     const brassBellMat = new THREE.MeshPhysicalMaterial({

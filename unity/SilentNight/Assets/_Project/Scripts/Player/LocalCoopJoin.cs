@@ -56,7 +56,7 @@ namespace SilentNight.Player
 
         // ---------------- roster (survives scene loads) ----------------
 
-        /// <summary>One joined extra player: slot index, sweater theme and its gamepad.</summary>
+        /// <summary>One joined extra player: slot index, sweater theme and its gamepad (or keyboard secondary).</summary>
         private struct RosterEntry
         {
             public int PlayerIndex;
@@ -65,6 +65,7 @@ namespace SilentNight.Player
             // Same-object check on top of the id: InputTestFixture (and Input System resets) can hand out the same
             // deviceId again to a brand-new virtual pad, which must not inherit a stale slot.
             public InputDevice Device;
+            public bool IsKeyboardSecondary;
         }
 
         private static readonly List<RosterEntry> s_Roster = new List<RosterEntry>(MaxLocalPlayers - 1);
@@ -77,25 +78,28 @@ namespace SilentNight.Player
         {
             if (device == null) return false;
             for (int i = 0; i < s_Roster.Count; i++)
-                if (s_Roster[i].DeviceId == device.deviceId && s_Roster[i].Device == device) return true;
+                if (!s_Roster[i].IsKeyboardSecondary && s_Roster[i].DeviceId == device.deviceId && s_Roster[i].Device == device) return true;
             return false;
         }
 
         /// <summary>Forgets every remembered extra player (tests / "back to main menu").</summary>
         public static void ClearRoster() => s_Roster.Clear();
 
-        private static void RosterAdd(int playerIndex, int themeIndex, InputDevice device)
+        private static void RosterAdd(int playerIndex, int themeIndex, InputDevice device, bool keyboardSecondary = false)
         {
-            if (device == null || playerIndex <= 0) return;
+            if ((!keyboardSecondary && device == null) || playerIndex <= 0) return;
             for (int i = s_Roster.Count - 1; i >= 0; i--)
-                if (s_Roster[i].PlayerIndex == playerIndex || s_Roster[i].DeviceId == device.deviceId)
+                if (s_Roster[i].PlayerIndex == playerIndex ||
+                    (keyboardSecondary && s_Roster[i].IsKeyboardSecondary) ||
+                    (!keyboardSecondary && device != null && s_Roster[i].DeviceId == device.deviceId))
                     s_Roster.RemoveAt(i);
             s_Roster.Add(new RosterEntry
             {
                 PlayerIndex = playerIndex,
                 ThemeIndex = themeIndex,
-                DeviceId = device.deviceId,
+                DeviceId = device != null ? device.deviceId : -1,
                 Device = device,
+                IsKeyboardSecondary = keyboardSecondary,
             });
             s_Roster.Sort((a, b) => a.PlayerIndex.CompareTo(b.PlayerIndex));
         }
@@ -161,6 +165,19 @@ namespace SilentNight.Player
             for (int i = 0; i < entries.Length; i++)
             {
                 RosterEntry e = entries[i];
+                if (e.IsKeyboardSecondary)
+                {
+                    if (Keyboard.current == null)
+                    {
+                        RosterRemoveIndex(e.PlayerIndex);
+                        continue;
+                    }
+                    if (ElfInput.AnyKeyboardSecondaryClaimed() || IsIndexUsed(e.PlayerIndex)) continue;
+                    if (CountLocalElves() >= MaxLocalPlayers) break;
+                    if (SpawnKeyboardElf(e.PlayerIndex, e.ThemeIndex, e.PlayerIndex - 1) != null) restored++;
+                    continue;
+                }
+
                 Gamepad pad = ResolvePad(e);
                 if (pad == null)
                 {
@@ -187,6 +204,46 @@ namespace SilentNight.Player
             if (_host == null || !_host.isActiveAndEnabled || _host.PlayerIndex != 0) return;
             if (!PlayerGate.CanControl) return;
 
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                // [F2]: Toggle Keyboard Player 2 (Arrows + Enter / RShift / RCtrl)
+                if (kb.f2Key.wasPressedThisFrame)
+                {
+                    ElfInput existingKb = FindKeyboardSecondaryElf();
+                    if (existingKb != null)
+                    {
+                        Leave(existingKb, "Эльф 2 (стрелки) покинул игру.");
+                    }
+                    else if (CountLocalElves() >= MaxLocalPlayers)
+                    {
+                        GameEvents.RaiseToast("Больше четырёх эльфов нельзя.");
+                    }
+                    else
+                    {
+                        JoinKeyboard();
+                    }
+                    return;
+                }
+
+                // [F3]: Toggle Split-Screen / Shared-Screen camera when 2+ players are active
+                if (kb.f3Key.wasPressedThisFrame)
+                {
+                    if (CountLocalElves() < 2)
+                    {
+                        GameEvents.RaiseToast("Сначала добавьте второго эльфа ([F2] или геймпад [Start]/[A])!");
+                    }
+                    else
+                    {
+                        bool split = ThirdPersonCameraRig.ToggleSplitScreen();
+                        GameEvents.RaiseToast(split
+                            ? "Камера коопа: Разделённый экран [F3]"
+                            : "Камера коопа: Общая камера [F3]");
+                    }
+                    return;
+                }
+            }
+
             var pads = Gamepad.all;
             for (int i = 0; i < pads.Count; i++)
             {
@@ -197,8 +254,8 @@ namespace SilentNight.Player
                 // That friend is about to be re-spawned from the roster in its old slot: not a new join.
                 if (_restorePending && IsInRoster(pad)) continue;
                 if (pad == _host.LastUsedGamepad) continue;
-                // Player 1 has touched nothing but (maybe) this pad: the press belongs to player 1, not a newcomer.
-                if (_host.LastUsedGamepad == null && !_host.HasUsedKeyboardMouse) continue;
+                // Player 1 has touched nothing but (maybe) this pad and has no keyboard: the press belongs to player 1.
+                if (_host.LastUsedGamepad == null && !_host.HasUsedKeyboardMouse && Keyboard.current == null) continue;
 
                 if (CountLocalElves() >= MaxLocalPlayers)
                 {
@@ -213,6 +270,14 @@ namespace SilentNight.Player
                 Join(pad);
                 break; // one join per frame
             }
+        }
+
+        private static ElfInput FindKeyboardSecondaryElf()
+        {
+            var all = ElfInput.All;
+            for (int i = 0; i < all.Count; i++)
+                if (all[i] != null && all[i].PlayerIndex > 0 && all[i].IsKeyboardSecondary) return all[i];
+            return null;
         }
 
         private static int CountLocalElves()
@@ -251,8 +316,42 @@ namespace SilentNight.Player
         private static bool IsIndexReserved(int idx)
         {
             for (int i = 0; i < s_Roster.Count; i++)
-                if (s_Roster[i].PlayerIndex == idx && ResolvePad(s_Roster[i]) != null) return true;
+            {
+                if (s_Roster[i].PlayerIndex != idx) continue;
+                if (s_Roster[i].IsKeyboardSecondary && Keyboard.current != null) return true;
+                if (!s_Roster[i].IsKeyboardSecondary && ResolvePad(s_Roster[i]) != null) return true;
+            }
             return false;
+        }
+
+        /// <summary>Spawns an extra elf controlled by the secondary keyboard layout (Arrow keys + Enter / RShift).</summary>
+        public GameObject JoinKeyboard()
+        {
+            if (ElfInput.AnyKeyboardSecondaryClaimed()) return null;
+            int index = FreePlayerIndex();
+            if (index < 0) return null;
+
+            GameObject elf = SpawnKeyboardElf(index, index, 0);
+            if (elf == null) return null;
+
+            GameEvents.RaiseToast($"Эльф {index + 1} в игре! (Стрелки + Enter / RShift)");
+            PlayerJoined?.Invoke(index, elf);
+            return elf;
+        }
+
+        private GameObject SpawnKeyboardElf(int index, int themeIndex, int firstDirection)
+        {
+            if (index <= 0 || index >= MaxLocalPlayers) return null;
+            if (_host != null) _host.SuppressPresses();
+
+            Vector3 pos = FindSpawnPoint(firstDirection);
+            Quaternion rot = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+            GameObject elf = PlayerSetup.CreateKeyboardPlayer(pos, themeIndex, index);
+            elf.transform.rotation = rot;
+            StartCoroutine(PlaceAfterStart(elf, pos, rot));
+
+            RosterAdd(index, themeIndex, null, true);
+            return elf;
         }
 
         /// <summary>Spawns an extra elf for <paramref name="pad"/> next to player 1. Returns null if no slot is free.</summary>
@@ -363,14 +462,14 @@ namespace SilentNight.Player
         /// Removes an extra elf (never player 1) and forgets it in the roster. Held item and sack contents are dropped
         /// where it stood.
         /// </summary>
-        public static void Leave(ElfInput elf)
+        public static void Leave(ElfInput elf, string customToast = null)
         {
             if (elf == null || elf.PlayerIndex == 0) return;
             int index = elf.PlayerIndex;
             GameObject go = elf.gameObject;
 
             RosterRemoveIndex(index);
-            RosterRemoveDevice(elf.AssignedGamepad);
+            if (elf.AssignedGamepad != null) RosterRemoveDevice(elf.AssignedGamepad);
 
             var carry = go.GetComponent<ElfCarry>();
             if (carry != null)
@@ -389,7 +488,7 @@ namespace SilentNight.Player
 
             PlayerLeft?.Invoke(index);
             Destroy(go);
-            GameEvents.RaiseToast($"Эльф {index + 1} покинул игру: геймпад отключён.");
+            GameEvents.RaiseToast(customToast ?? $"Эльф {index + 1} покинул игру: геймпад отключён.");
         }
     }
 }

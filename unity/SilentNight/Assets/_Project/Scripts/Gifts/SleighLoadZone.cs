@@ -13,7 +13,7 @@ namespace SilentNight.Gifts
         [SerializeField] private string departPrompt = "Отправиться в рейс!";
         [SerializeField] private string noOrderPrompt = "Выбрать заказ на доске";
 
-        private readonly int[] _need = new int[3];
+        private readonly int[] _need = new int[8];
         private string _cachedPrompt;
         private int _cachedLoaded = -1, _cachedTotal = -1;
         private Order _cachedOrder;
@@ -65,7 +65,7 @@ namespace SilentNight.Gifts
 
             if (AllLoaded)
             {
-                GameEvents.RaiseRequestStartDelivery(order);
+                SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedDeparture(order);
                 return;
             }
 
@@ -75,7 +75,7 @@ namespace SilentNight.Gifts
         private void LoadFrom(ICarrier carrier, Order order)
         {
             // Remaining count per kind for this order.
-            _need[0] = _need[1] = _need[2] = 0;
+            System.Array.Clear(_need, 0, _need.Length);
             for (int i = 0; i < order.Gifts.Count; i++) _need[(int)order.Gifts[i]]++;
             for (int i = 0; i < GameServices.LoadedGifts.Count; i++) _need[(int)GameServices.LoadedGifts[i]]--;
 
@@ -93,6 +93,7 @@ namespace SilentNight.Gifts
                     _need[k]--;
                     GameServices.LoadedGifts.Add(item.Kind);
                     added++;
+                    SilentNight.Multiplayer.CoopNetworkManager.Instance?.NotifySleighLoaded(item.Kind);
                 }
                 else rejected++;
 

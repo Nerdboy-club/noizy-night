@@ -37,10 +37,12 @@ Label {
     height: 40px;
     padding: 0px 10px 0px 10px;
     margin-right: 10px;
-    background-color: rgb(255, 243, 214);
+    background-color: rgb(255, 246, 224);
     border-width: 3px;
-    border-bottom-width: 7px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 255, 255);
+    border-bottom-width: 7px;
+    border-bottom-color: rgb(170, 140, 105);
     border-radius: 10px;
     color: rgb(42, 20, 10);
     font-size: 22px;
@@ -171,14 +173,24 @@ Label {
     min-height: 64px;
     background-color: rgb(59, 35, 20);
     border-width: 4px;
-    border-bottom-width: 8px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(110, 68, 42);
+    border-bottom-width: 8px;
+    border-bottom-color: rgb(26, 12, 6);
     border-radius: 32px;
-    transition-property: scale;
-    transition-duration: 0.12s;
+    transition-property: scale, background-color;
+    transition-duration: 0.15s;
 }
-.sn-chip--gold { border-color: rgb(42, 20, 10); background-color: rgb(107, 62, 34); }
-.sn-chip--done { background-color: rgb(46, 154, 69); }
+.sn-chip--gold {
+    background-color: rgb(112, 66, 36);
+    border-top-color: rgb(165, 100, 56);
+    border-bottom-color: rgb(35, 16, 8);
+}
+.sn-chip--done {
+    background-color: rgb(46, 154, 69);
+    border-top-color: rgb(110, 215, 130);
+    border-bottom-color: rgb(22, 85, 36);
+}
 .sn-chip__icon { width: 46px; height: 46px; margin-right: 10px; }
 .sn-chip__value {
     font-size: 34px;
@@ -203,20 +215,26 @@ Label {
     max-width: 620px;
     flex-direction: row;
     align-items: center;
-    padding: 10px 20px 12px 12px;
-    background-color: rgba(59, 35, 20, 0.88);
+    padding: 10px 20px 12px 14px;
+    background-color: rgba(64, 38, 22, 0.92);
     border-width: 3px;
-    border-bottom-width: 6px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(125, 78, 48);
+    border-bottom-width: 6px;
+    border-bottom-color: rgb(26, 12, 6);
     border-radius: 16px;
+    transition-property: scale;
+    transition-duration: 0.15s;
 }
 .sn-objective__mark {
     width: 14px;
     height: 34px;
     margin-right: 14px;
-    background-color: rgb(242, 182, 48);
+    background-color: rgb(245, 192, 46);
     border-width: 2px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 235, 130);
+    border-bottom-color: rgb(160, 95, 20);
     border-radius: 6px;
     flex-shrink: 0;
 }
@@ -225,6 +243,9 @@ Label {
     -unity-font-style: bold;
     white-space: normal;
     color: rgb(255, 243, 214);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 2px 0px rgba(42, 20, 10, 0.8);
     flex-shrink: 1;
 }
 .sn-hud--spooky .sn-objective { background-color: rgba(58, 30, 82, 0.9); }
@@ -294,6 +315,26 @@ Label {
     font-size: 28px;
     -unity-font-style: bold;
     -unity-text-align: middle-center;
+    transition-property: scale, opacity;
+    transition-duration: 0.15s;
+}
+.sn-toast--red {
+    background-color: rgb(200, 40, 46);
+    border-top-color: rgb(255, 120, 120);
+    border-bottom-color: rgb(110, 16, 20);
+    color: rgb(255, 243, 214);
+}
+.sn-toast--green {
+    background-color: rgb(46, 154, 69);
+    border-top-color: rgb(105, 210, 125);
+    border-bottom-color: rgb(20, 85, 35);
+    color: rgb(255, 243, 214);
+}
+.sn-toast--gold {
+    background-color: rgb(242, 182, 48);
+    border-top-color: rgb(255, 235, 130);
+    border-bottom-color: rgb(160, 95, 20);
+    color: rgb(42, 20, 10);
 }
 
 /* noise gauge + bars — bottom-left */
@@ -369,8 +410,27 @@ Label {
     width: 100%;
     border-radius: 11px;
 }
-.sn-bar__fill--stamina { background-color: rgb(46, 154, 69); }
-.sn-bar__fill--fuel { background-color: rgb(240, 122, 26); }
+.sn-bar__fill--stamina {
+    background-color: rgb(46, 154, 69);
+    border-top-width: 2px;
+    border-top-color: rgb(110, 215, 130);
+    border-bottom-width: 3px;
+    border-bottom-color: rgb(25, 95, 40);
+    transition-property: background-color;
+    transition-duration: 0.18s;
+}
+.sn-bar__fill--stamina-low {
+    background-color: rgb(215, 52, 40);
+    border-top-color: rgb(255, 130, 120);
+    border-bottom-color: rgb(130, 20, 15);
+}
+.sn-bar__fill--fuel {
+    background-color: rgb(240, 122, 26);
+    border-top-width: 2px;
+    border-top-color: rgb(255, 190, 80);
+    border-bottom-width: 3px;
+    border-bottom-color: rgb(150, 70, 10);
+}
 .sn-bar__shine {
     position: absolute;
     left: 8px; right: 8px; top: 3px;
@@ -389,11 +449,15 @@ Label {
     align-items: center;
     margin-bottom: 8px;
     padding: 4px 16px 6px 6px;
-    background-color: rgba(46, 154, 69, 0.92);
+    background-color: rgba(46, 154, 69, 0.94);
     border-width: 3px;
-    border-bottom-width: 6px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(110, 215, 130);
+    border-bottom-width: 6px;
+    border-bottom-color: rgb(22, 85, 36);
     border-radius: 22px;
+    transition-property: scale;
+    transition-duration: 0.15s;
 }
 .sn-catnip .sn-key {
     min-width: 32px;
@@ -414,13 +478,17 @@ Label {
 .sn-hands {
     max-width: 520px;
     padding: 8px 18px 10px 16px;
-    background-color: rgba(59, 35, 20, 0.88);
+    background-color: rgba(64, 38, 22, 0.92);
     border-width: 3px;
-    border-bottom-width: 6px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(125, 78, 48);
+    border-bottom-width: 6px;
+    border-bottom-color: rgb(26, 12, 6);
     border-left-color: rgb(242, 182, 48);
     border-left-width: 8px;
     border-radius: 14px;
+    transition-property: scale;
+    transition-duration: 0.15s;
 }
 .sn-hud--spooky .sn-hands { background-color: rgba(58, 30, 82, 0.9); border-left-color: rgb(176, 124, 255); }
 .sn-hands__title {
@@ -467,6 +535,8 @@ Label {
     background-color: rgb(74, 46, 30);
     align-items: center;
     justify-content: center;
+    transition-property: background-color, border-color, scale;
+    transition-duration: 0.15s;
 }
 .sn-slot__icon {
     width: 56px;
@@ -474,8 +544,11 @@ Label {
     display: none;
 }
 .sn-slot--full {
-    background-color: rgb(247, 230, 196);
+    background-color: rgb(255, 244, 218);
     border-color: rgb(242, 182, 48);
+    border-top-color: rgb(255, 230, 120);
+    border-bottom-color: rgb(160, 95, 20);
+    border-bottom-width: 8px;
 }
 .sn-slot--full .sn-slot__icon { display: flex; }
 .sn-sack__label {
@@ -503,11 +576,13 @@ Label {
 .sn-prompt__plaque {
     flex-direction: row;
     align-items: center;
-    padding: 10px 30px 12px 12px;
-    background-color: rgba(59, 35, 20, 0.92);
+    padding: 10px 30px 12px 14px;
+    background-color: rgba(64, 38, 22, 0.94);
     border-width: 4px;
-    border-bottom-width: 9px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(126, 78, 48);
+    border-bottom-width: 9px;
+    border-bottom-color: rgb(26, 12, 6);
     border-radius: 24px;
 }
 .sn-prompt__text {
@@ -522,17 +597,29 @@ Label {
 /* hub hint — bottom-centre */
 .sn-hint {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 34px;
+    left: 50%;
+    translate: -50% 0;
+    bottom: 24px;
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    opacity: 0.9;
+    padding: 6px 20px 8px 20px;
+    background-color: rgba(42, 20, 10, 0.65);
+    border-radius: 20px;
+    border-width: 2px;
+    border-color: rgba(120, 75, 45, 0.45);
+}
+.sn-hint .sn-key {
+    min-width: 34px;
+    height: 34px;
+    font-size: 18px;
+    margin-right: 8px;
+    border-bottom-width: 5px;
 }
 .sn-hint__text {
     font-size: 22px;
     -unity-font-style: bold;
+    color: rgb(255, 243, 214);
     -unity-text-outline-width: 1px;
     -unity-text-outline-color: rgb(42, 20, 10);
     text-shadow: 0px 2px 0px rgba(42, 20, 10, 0.9);
@@ -545,26 +632,342 @@ Label {
     align-items: center;
     justify-content: center;
 }
+/* ================================================================= R.E.P.O. MAIN MENU */
+.sn-screen--repo {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-between;
+    padding: 50px 70px 50px 70px;
+    background-color: rgb(22, 14, 18);
+}
+
+.sn-repo-col {
+    width: 520px;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.sn-repo-title {
+    margin-bottom: 24px;
+}
+
+.sn-repo-title__kicker {
+    font-size: 24px;
+    -unity-font-style: bold;
+    letter-spacing: 6px;
+    color: rgb(245, 180, 40);
+    text-shadow: 0px 3px 0px rgba(42, 20, 10, 0.9);
+}
+
+.sn-repo-title__big {
+    font-size: 56px;
+    -unity-font-style: bold;
+    white-space: nowrap;
+    letter-spacing: 3px;
+    color: rgb(255, 245, 225);
+    -unity-text-outline-width: 2px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 6px 0px rgb(42, 20, 10);
+    margin-top: 4px;
+    margin-bottom: 6px;
+}
+
+.sn-repo-title__tag {
+    font-size: 16px;
+    -unity-font-style: bold;
+    letter-spacing: 2px;
+    color: rgb(245, 180, 40);
+    margin-top: 4px;
+}
+
+.sn-repo-nav {
+    flex-direction: column;
+    margin-top: 18px;
+    margin-bottom: 20px;
+}
+
+.sn-repo-btn {
+    flex-direction: row;
+    align-items: center;
+    background-color: transparent;
+    border-width: 0;
+    padding: 10px 14px 10px 0px;
+    margin-bottom: 12px;
+    transition-property: translate;
+    transition-duration: 0.12s;
+}
+
+.sn-repo-btn:hover {
+    translate: 8px 0px;
+}
+
+.sn-repo-btn__arrow {
+    font-size: 24px;
+    color: rgb(245, 180, 40);
+    opacity: 0;
+    margin-right: 14px;
+    transition-property: opacity;
+    transition-duration: 0.12s;
+}
+
+.sn-repo-btn:hover .sn-repo-btn__arrow {
+    opacity: 1;
+}
+
+.sn-repo-btn__text {
+    font-size: 32px;
+    -unity-font-style: bold;
+    letter-spacing: 2px;
+    color: rgb(225, 215, 195);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 3px 0px rgba(20, 10, 5, 0.95);
+    transition-property: color;
+    transition-duration: 0.12s;
+}
+
+.sn-repo-btn:hover .sn-repo-btn__text {
+    color: rgb(255, 245, 215);
+}
+
+.sn-repo-bottom__text {
+    font-size: 15px;
+    -unity-font-style: bold;
+    color: rgba(255, 240, 210, 0.55);
+}
+
+/* Right Staging & Showcase Area */
+.sn-repo-right {
+    flex-grow: 1;
+    margin-left: 60px;
+    align-items: center;
+    justify-content: center;
+}
+
+.sn-repo-card {
+    width: 860px;
+    padding: 30px 40px 34px 40px;
+    background-color: rgb(42, 26, 18);
+    border-width: 4px;
+    border-color: rgb(42, 20, 10);
+    border-top-color: rgb(130, 80, 50);
+    border-bottom-width: 10px;
+    border-bottom-color: rgb(20, 10, 6);
+    border-radius: 28px;
+}
+
+.sn-repo-showcase-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.sn-repo-preview-frame {
+    width: 250px;
+    height: 250px;
+    min-width: 250px;
+    min-height: 250px;
+    margin-right: 28px;
+    background-color: rgb(16, 12, 18);
+    border-width: 3px;
+    border-color: rgb(75, 45, 25);
+    border-top-color: rgb(150, 100, 50);
+    border-radius: 20px;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+}
+
+.sn-repo-preview-img {
+    width: 244px;
+    height: 244px;
+    border-radius: 16px;
+}
+
+.sn-repo-details {
+    flex-grow: 1;
+    flex-direction: column;
+}
+
+.sn-repo-card__header {
+    font-size: 32px;
+    -unity-font-style: bold;
+    letter-spacing: 2px;
+    color: rgb(245, 185, 45);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 3px 0px rgba(42, 20, 10, 0.9);
+    margin-bottom: 14px;
+}
+
+.sn-repo-card__info {
+    margin-bottom: 12px;
+}
+
+.sn-repo-card__title {
+    font-size: 28px;
+    -unity-font-style: bold;
+    color: rgb(255, 245, 225);
+    margin-bottom: 4px;
+}
+
+.sn-repo-card__role {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(245, 185, 45);
+    margin-bottom: 10px;
+}
+
+.sn-repo-card__desc {
+    font-size: 18px;
+    color: rgb(215, 185, 155);
+    white-space: normal;
+    margin-bottom: 20px;
+}
+
+.sn-repo-card__nav {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.sn-repo-card__arrow-btn {
+    min-width: 200px;
+}
+
+.sn-repo-swatches {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.sn-repo-swatch {
+    margin: 4px;
+    padding: 8px 14px 8px 14px;
+    background-color: rgb(30, 18, 12);
+    border-width: 2px;
+    border-color: rgb(55, 30, 18);
+    border-radius: 12px;
+    font-size: 16px;
+    -unity-font-style: bold;
+    color: rgb(200, 180, 160);
+}
+
+.sn-repo-swatch--active {
+    background-color: rgb(46, 154, 69);
+    border-color: rgb(110, 215, 130);
+    color: rgb(255, 255, 255);
+}
+
+.sn-repo-card__status {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(255, 240, 210);
+    margin-bottom: 16px;
+}
+
+.sn-repo-card__ip-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.sn-repo-card__ip-val {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(120, 215, 140);
+    margin-right: 14px;
+}
+
+.sn-repo-roster {
+    margin-bottom: 20px;
+}
+
+.sn-repo-roster__slot {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 18px 10px 18px;
+    margin-bottom: 8px;
+    background-color: rgb(30, 16, 10);
+    border-width: 2px;
+    border-color: rgb(42, 20, 10);
+    border-radius: 14px;
+}
+
+.sn-repo-roster__slot--active {
+    background-color: rgb(55, 30, 18);
+    border-color: rgb(245, 185, 45);
+    border-left-width: 6px;
+}
+
+.sn-repo-roster__name {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(255, 243, 214);
+}
+
+.sn-repo-roster__state {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: rgb(245, 185, 45);
+}
+
+.sn-repo-form {
+    margin-bottom: 20px;
+}
+
+.sn-repo-form__label {
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(255, 243, 214);
+    margin-top: 10px;
+    margin-bottom: 4px;
+}
+
+.sn-repo-form__field {
+    min-height: 44px;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.sn-repo-card__footer {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+}
+
+.sn-repo-card__start {
+    min-width: 300px;
+}
+
 .sn-screen--menu { background-color: rgba(16, 10, 24, 0.55); }
 
 .sn-sign {
     align-items: center;
     padding: 34px 90px 40px 90px;
     margin-bottom: 40px;
-    background-color: rgb(107, 62, 34);
+    background-color: rgb(116, 68, 38);
     border-width: 8px;
-    border-bottom-width: 18px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(165, 100, 58);
+    border-bottom-width: 18px;
+    border-bottom-color: rgb(34, 15, 8);
     border-radius: 40px;
     rotate: -1.5deg;
 }
 .sn-sign__rope {
     position: absolute;
     top: -90px;
-    width: 10px;
+    width: 12px;
     height: 90px;
-    background-color: rgb(176, 122, 18);
-    border-width: 2px;
+    background-color: rgb(190, 134, 24);
+    border-width: 3px;
     border-color: rgb(42, 20, 10);
 }
 .sn-sign__rope--l { left: 120px; }
@@ -599,8 +1002,10 @@ Label {
     padding: 6px 28px 8px 28px;
     background-color: rgb(200, 40, 46);
     border-width: 4px;
-    border-bottom-width: 8px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 125, 125);
+    border-bottom-width: 8px;
+    border-bottom-color: rgb(108, 16, 20);
     border-radius: 18px;
     font-size: 32px;
     -unity-font-style: bold;
@@ -642,30 +1047,33 @@ Label {
 .sn-backdrop--red { background-color: rgba(60, 6, 8, 0.7); }
 
 .sn-panel {
-    padding: 26px 34px 26px 34px;
+    padding: 20px 30px 20px 30px;
+    max-height: 92%;
+    max-width: 94%;
     background-color: rgb(107, 62, 34);
     border-width: 8px;
     border-bottom-width: 18px;
     border-color: rgb(42, 20, 10);
     border-radius: 36px;
 }
-.sn-board { width: 1500px; }
-.sn-bench { width: 1180px; }
+.sn-board { width: 1460px; }
+.sn-bench { width: 1140px; }
 
 .sn-panel__header {
     flex-direction: row;
     align-items: center;
-    margin-bottom: 18px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 .sn-panel__header .sn-chip { margin-bottom: 0; }
 .sn-panel__title {
-    padding: 8px 34px 10px 34px;
+    padding: 6px 28px 8px 28px;
     background-color: rgb(200, 40, 46);
     border-width: 5px;
     border-bottom-width: 10px;
     border-color: rgb(42, 20, 10);
     border-radius: 20px;
-    font-size: 46px;
+    font-size: 40px;
     -unity-font-style: bold;
     letter-spacing: 3px;
     color: rgb(255, 243, 214);
@@ -677,7 +1085,8 @@ Label {
 .sn-panel__footer {
     flex-direction: row;
     align-items: center;
-    margin-top: 14px;
+    margin-top: 12px;
+    flex-shrink: 0;
 }
 
 /* ----------------------------------------------------------------- order cards */
@@ -685,8 +1094,8 @@ Label {
     flex-direction: row;
     justify-content: center;
     align-items: flex-start;
-    padding: 30px 10px 20px 10px;
-    min-height: 520px;
+    padding: 22px 10px 16px 10px;
+    min-height: 430px;
     background-color: rgb(74, 46, 30);
     border-width: 5px;
     border-color: rgb(42, 20, 10);
@@ -695,14 +1104,14 @@ Label {
 .sn-cards__empty {
     font-size: 30px;
     -unity-font-style: bold;
-    margin-top: 180px;
+    margin-top: 140px;
 }
 
 .sn-card {
-    width: 420px;
-    min-height: 450px;
-    margin: 0 18px 0 18px;
-    padding: 34px 26px 22px 26px;
+    width: 410px;
+    min-height: 380px;
+    margin: 0 16px 0 16px;
+    padding: 28px 24px 18px 24px;
     background-color: rgb(247, 230, 196);
     border-width: 5px;
     border-bottom-width: 12px;
@@ -721,6 +1130,8 @@ Label {
 .sn-card:hover { scale: 1.04 1.04; translate: 0px -6px; }
 .sn-card--selected {
     border-color: rgb(242, 182, 48);
+    border-top-color: rgb(255, 235, 140);
+    border-bottom-color: rgb(180, 110, 20);
     border-width: 8px;
     border-bottom-width: 14px;
     scale: 1.06 1.06;
@@ -736,9 +1147,12 @@ Label {
     width: 36px;
     height: 36px;
     border-radius: 18px;
-    background-color: rgb(200, 40, 46);
-    border-width: 4px;
+    background-color: rgb(215, 42, 48);
+    border-width: 3px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 145, 145);
+    border-bottom-color: rgb(130, 20, 20);
+    border-bottom-width: 5px;
 }
 .sn-card__mood {
     align-self: flex-start;
@@ -841,7 +1255,7 @@ Label {
 
 /* ----------------------------------------------------------------- workbench */
 .sn-upgrades {
-    padding: 16px;
+    padding: 12px;
     background-color: rgb(74, 46, 30);
     border-width: 5px;
     border-color: rgb(42, 20, 10);
@@ -850,22 +1264,22 @@ Label {
 .sn-upg {
     flex-direction: row;
     align-items: center;
-    margin: 8px 0 8px 0;
-    padding: 14px 18px 16px 14px;
+    margin: 5px 0 5px 0;
+    padding: 8px 16px 10px 12px;
     background-color: rgb(247, 230, 196);
     border-width: 4px;
-    border-bottom-width: 9px;
+    border-bottom-width: 8px;
     border-color: rgb(42, 20, 10);
-    border-radius: 22px;
+    border-radius: 20px;
     transition-property: scale;
     transition-duration: 0.12s;
 }
 .sn-upg--maxed { background-color: rgb(255, 236, 170); }
 .sn-upg__plate {
-    width: 104px;
-    height: 104px;
-    margin-right: 20px;
-    border-radius: 52px;
+    width: 82px;
+    height: 82px;
+    margin-right: 16px;
+    border-radius: 41px;
     border-width: 5px;
     border-color: rgb(42, 20, 10);
     background-color: rgb(107, 62, 34);
@@ -873,29 +1287,38 @@ Label {
     justify-content: center;
     flex-shrink: 0;
 }
-.sn-upg__icon { width: 70px; height: 70px; }
+.sn-upg__icon { width: 56px; height: 56px; }
 .sn-upg__info { flex-grow: 1; }
 .sn-upg__name {
-    font-size: 34px;
+    font-size: 28px;
     -unity-font-style: bold;
     color: rgb(42, 20, 10);
 }
 .sn-upg__desc {
-    font-size: 20px;
+    font-size: 18px;
     color: rgb(92, 60, 40);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
-.sn-pips { flex-direction: row; }
+.sn-pips { flex-direction: row; align-items: center; }
 .sn-pip {
-    width: 40px;
-    height: 22px;
+    width: 38px;
+    height: 20px;
     margin-right: 8px;
-    border-width: 4px;
+    border-width: 3px;
     border-color: rgb(42, 20, 10);
-    border-radius: 11px;
-    background-color: rgb(120, 96, 80);
+    border-top-color: rgb(30, 14, 8);
+    border-bottom-color: rgb(75, 45, 25);
+    border-radius: 10px;
+    background-color: rgb(70, 52, 42);
+    transition-property: background-color, border-color, scale;
+    transition-duration: 0.15s;
 }
-.sn-pip--on { background-color: rgb(242, 182, 48); }
+.sn-pip--on {
+    background-color: rgb(245, 192, 46);
+    border-color: rgb(150, 85, 20);
+    border-top-color: rgb(255, 230, 130);
+    border-bottom-color: rgb(105, 50, 10);
+}
 .sn-upg__buy {
     min-width: 200px;
     margin: 0 0 0 16px;
@@ -915,8 +1338,16 @@ Label {
     border-color: rgb(42, 20, 10);
     border-radius: 40px;
 }
-.sn-dialog--gold { background-color: rgb(46, 110, 58); }
-.sn-dialog--red { background-color: rgb(110, 26, 30); }
+.sn-dialog--gold {
+    background-color: rgb(46, 110, 58);
+    border-top-color: rgb(75, 165, 90);
+    border-bottom-color: rgb(20, 55, 28);
+}
+.sn-dialog--red {
+    background-color: rgb(110, 26, 30);
+    border-top-color: rgb(170, 45, 50);
+    border-bottom-color: rgb(55, 10, 14);
+}
 
 .sn-dialog__ribbon {
     position: absolute;
@@ -924,8 +1355,10 @@ Label {
     padding: 12px 48px 14px 48px;
     background-color: rgb(242, 182, 48);
     border-width: 6px;
-    border-bottom-width: 12px;
     border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 235, 130);
+    border-bottom-width: 12px;
+    border-bottom-color: rgb(150, 95, 20);
     border-radius: 22px;
     font-size: 50px;
     -unity-font-style: bold;
@@ -937,6 +1370,8 @@ Label {
 }
 .sn-dialog__ribbon--red {
     background-color: rgb(200, 40, 46);
+    border-top-color: rgb(255, 120, 120);
+    border-bottom-color: rgb(110, 15, 20);
     color: rgb(255, 243, 214);
 }
 .sn-dialog__address {
@@ -1038,9 +1473,13 @@ Label {
 .sn-recap__rank {
     font-size: 28px;
     -unity-font-style: bold;
-    color: rgb(42, 20, 10);
-    padding: 2px 12px 4px 12px;
+    color: rgb(255, 248, 230);
+    padding: 3px 14px 4px 14px;
     border-radius: 10px;
+    border-width: 2px;
+    border-color: rgb(42, 20, 10);
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
     background-color: rgb(176, 122, 18);
 }
 .sn-recap__rank--mouse { background-color: rgb(120, 180, 220); }
@@ -1051,4 +1490,63 @@ Label {
     color: rgb(72, 44, 28);
     white-space: normal;
     padding: 1px 0 1px 0;
+}
+
+/* ----------------------------------------------------------------- reticle & team countdown */
+.sn-reticle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    translate: -4px -4px;
+    background-color: rgba(255, 243, 214, 0.75);
+    border-width: 2px;
+    border-color: rgb(42, 20, 10);
+    border-radius: 4px;
+    transition-property: scale, background-color, border-color;
+    transition-duration: 0.1s;
+}
+.sn-reticle--focus {
+    scale: 2 2;
+    background-color: rgb(242, 182, 48);
+    border-color: rgb(42, 20, 10);
+}
+
+.sn-countdown-banner {
+    position: absolute;
+    top: 155px;
+    left: 50%;
+    translate: -50% 0;
+    min-width: 360px;
+    padding: 12px 32px 14px 32px;
+    background-color: rgba(186, 32, 38, 0.95);
+    border-width: 4px;
+    border-color: rgb(42, 20, 10);
+    border-top-color: rgb(255, 120, 120);
+    border-bottom-width: 9px;
+    border-bottom-color: rgb(105, 15, 20);
+    border-radius: 22px;
+    align-items: center;
+    justify-content: center;
+    transition-property: scale;
+    transition-duration: 0.15s;
+}
+.sn-countdown-banner__title {
+    font-size: 38px;
+    -unity-font-style: bold;
+    color: rgb(255, 243, 214);
+    -unity-text-align: middle-center;
+    -unity-text-outline-width: 1.5px;
+    -unity-text-outline-color: rgb(42, 20, 10);
+    text-shadow: 0px 3px 0px rgba(42, 20, 10, 0.9);
+}
+.sn-countdown-banner__sub {
+    margin-top: 2px;
+    font-size: 20px;
+    -unity-font-style: bold;
+    color: rgb(242, 182, 48);
+    -unity-text-align: middle-center;
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgb(42, 20, 10);
 }

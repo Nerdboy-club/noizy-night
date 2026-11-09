@@ -97,6 +97,12 @@ namespace SilentNight.UI
             if (index < 0 || index >= _shown.Count) return;
             GameServices.ActiveOrder = _shown[index];
             RefreshSelection();
+            if (index >= 0 && index < _cardEls.Count)
+            {
+                var el = _cardEls[index];
+                el.AddToClassList("sn-bump");
+                el.schedule.Execute(() => el.RemoveFromClassList("sn-bump")).StartingIn(160);
+            }
         }
 
         private void RefreshSelection()
@@ -105,6 +111,10 @@ namespace SilentNight.UI
             for (int i = 0; i < _cardEls.Count; i++)
                 _cardEls[i].EnableInClassList("sn-card--selected", _shown[i] == active);
             _go.SetEnabled(active != null);
+
+            bool isCoop = SilentNight.Multiplayer.CoopNetworkManager.Instance != null &&
+                          SilentNight.Multiplayer.CoopNetworkManager.Instance.Role != SilentNight.Multiplayer.CoopNetworkManager.NetRole.Offline;
+            _go.text = isCoop ? "В рейс командой!" : "В рейс!";
         }
 
         private void OnReroll()
@@ -118,7 +128,7 @@ namespace SilentNight.UI
             var order = GameServices.ActiveOrder;
             if (order == null) return;
             Owner.RequestClosePanel();
-            GameEvents.RaiseRequestStartDelivery(order);
+            SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedDeparture(order);
         }
 
         public override void Tick(float dt)

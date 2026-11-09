@@ -315,7 +315,7 @@ namespace SilentNight.Gifts
 
         // ---------------- materials ----------------
 
-        public static Material Mat(Color c, float metallic = 0f, float smoothness = 0.35f)
+        public static Material Mat(Color c, float metallic = 0f, float smoothness = 0.55f)
         {
             var key = (c, metallic, smoothness);
             if (MaterialCache.TryGetValue(key, out var cached) && cached != null) return cached;

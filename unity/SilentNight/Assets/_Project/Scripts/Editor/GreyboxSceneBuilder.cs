@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using SilentNight.Audio;
 using SilentNight.Core;
+using SilentNight.FX;
 using SilentNight.Gifts;
 using SilentNight.Stealth;
 using SilentNight.UI;
@@ -39,10 +40,39 @@ namespace SilentNight.EditorTools
         private const bool BakeEnvironmentLighting = true;
 
         private const float DoorW = 1.4f;   // ≥ 1.2 m: the huge gift (1.64 m) passes only when carried lengthwise
-        private const float DoorH = 2.2f;
+        private const float DoorH = 2.65f;  // Human-scale tall doorways vs miniature 0.55x elf
+        private const string AutoBuildKey = "SilentNight_AutoSceneRebuild_v5";
 
         private static Dictionary<string, Material> _mats;
         private static VolumeProfile _profile;
+
+        [InitializeOnLoadMethod]
+        private static void AutoRebuildIfNeeded()
+        {
+            if (Application.isBatchMode) return;
+            if (EditorPrefs.GetInt(AutoBuildKey, 0) >= 1) return;
+
+            EditorApplication.delayCall += TryRunAutoRebuild;
+            EditorApplication.playModeStateChanged += OnPlayModeChangedForAutoRebuild;
+        }
+
+        private static void OnPlayModeChangedForAutoRebuild(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredEditMode)
+                EditorApplication.delayCall += TryRunAutoRebuild;
+        }
+
+        private static void TryRunAutoRebuild()
+        {
+            if (Application.isBatchMode || EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+                return;
+            if (EditorPrefs.GetInt(AutoBuildKey, 0) >= 1) return;
+
+            EditorPrefs.SetInt(AutoBuildKey, 1);
+            EditorApplication.playModeStateChanged -= OnPlayModeChangedForAutoRebuild;
+            Debug.Log("[Silent Night] Auto-rebuilding scenes (compact Hub + all 4 3D models + human-scale House interior)…");
+            BuildAll();
+        }
 
         // ------------------------------------------------------------------ menu
 
@@ -53,7 +83,9 @@ namespace SilentNight.EditorTools
 
             ProjectBootstrap.EnsureTagsAndLayers();
             if (GraphicsSettings.defaultRenderPipeline == null) ProjectBootstrap.EnsureRenderPipeline();
+            else ProjectBootstrap.EnsureRenderPipeline();
             _mats = ProjectBootstrap.EnsureMaterials();
+            EnvironmentMaterialFixer.FixAll();
             _profile = ProjectBootstrap.EnsureVolumeProfile();
             var panelSettings = ProjectBootstrap.EnsurePanelSettings();
             ProjectBootstrap.EnsureFolder(ScenesFolder);
@@ -111,119 +143,138 @@ namespace SilentNight.EditorTools
             Lightmapping.lightingSettings = lighting;
 
             SetupEnvironmentLighting(
-                new Color(0.45f, 0.36f, 0.30f), new Color(0.32f, 0.25f, 0.20f), new Color(0.14f, 0.10f, 0.08f),
-                true, new Color(0.20f, 0.15f, 0.13f), 0.008f);
-            CreateCamera(new Vector3(0f, 2.5f, -7f), Quaternion.Euler(12f, 0f, 0f));
-            CreateMoonlight(0.35f, Quaternion.Euler(55f, -35f, 0f));
+                new Color(0.65f, 0.52f, 0.40f), new Color(0.48f, 0.36f, 0.27f), new Color(0.26f, 0.19f, 0.14f),
+                true, new Color(0.18f, 0.14f, 0.18f), 0.005f);
+            CreateCamera(new Vector3(0f, 2.2f, -4.8f), Quaternion.Euler(12f, 0f, 0f));
+            CreateMoonlight(0.45f, Quaternion.Euler(50f, -35f, 0f));
             CreateGlobalVolume();
 
             Transform env = new GameObject("Environment").transform;
 
-            // Floor, rug, snow outside.
-            Floor(env, "Floor", -8f, 8f, -8f, 8f, ProjectBootstrap.MatWood, SurfaceType.Wood);
-            Patch(env, "Rug", new Vector3(0f, 0f, 0.5f), new Vector2(6f, 6f), ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
+            // Cozy, compact 11m x 11m (-5.5..5.5) Santa's Workshop floor, Nordic rug with gold fringe, snow outside.
+            const float half = 5.5f, h = 3.8f, t = 0.36f;
+            Floor(env, "Floor", -half, half, -half, half, ProjectBootstrap.MatWood, SurfaceType.Wood);
+            BuildNordicRug(env, "WorkshopRug", new Vector3(0f, 0f, 0.2f), new Vector2(4.8f, 4.8f));
             Box(env, "SnowGround", new Vector3(0f, -0.25f, 0f), new Vector3(80f, 0.3f, 80f), ProjectBootstrap.MatSnow);
 
-            // Walls (5 m brick) + dark wainscot.
-            const float h = 4f, t = 0.4f;
-            WallAlongX(env, "WallN", 8f, -8.2f, 8.2f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongX(env, "WallS", -8f, -8.2f, 8.2f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongZ(env, "WallW", -8f, -8f, 8f, h, t, ProjectBootstrap.MatBrick);
-            WallAlongZ(env, "WallE", 8f, -8f, 8f, h, t, ProjectBootstrap.MatBrick);
-            Box(env, "Ceiling", new Vector3(0f, h + 0.05f, 0f), new Vector3(16.6f, 0.1f, 16.6f), ProjectBootstrap.MatDarkWood);
-            for (int i = 0; i < 7; i++)
-                Box(env, "RoofBeam", new Vector3(-7.2f + i * 2.4f, h - 0.12f, 0f), new Vector3(0.3f, 0.24f, 16.2f), ProjectBootstrap.MatWood, false);
-            Box(env, "WainscotN", new Vector3(0f, 0.575f, 7.77f), new Vector3(15.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotS", new Vector3(0f, 0.575f, -7.77f), new Vector3(15.6f, 1.15f, 0.06f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotW", new Vector3(-7.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 15.6f), ProjectBootstrap.MatDarkWood, false);
-            Box(env, "WainscotE", new Vector3(7.77f, 0.575f, 0f), new Vector3(0.06f, 1.15f, 15.6f), ProjectBootstrap.MatDarkWood, false);
-
-            // Decor: shelves with parcels, crates, a tree, a fireplace, hanging lanterns.
-            for (int i = 0; i < 2; i++)
+            // Warm brick & timber walls (3.8 m high) + full wainscoting, chair rail, baseboard, and crown molding.
+            WallAlongX(env, "WallN", half, -(half + 0.18f), half + 0.18f, h, t, ProjectBootstrap.MatBrick);
+            WallAlongX(env, "WallS", -half, -(half + 0.18f), half + 0.18f, h, t, ProjectBootstrap.MatBrick);
+            WallAlongZ(env, "WallW", -half, -half, half, h, t, ProjectBootstrap.MatBrick);
+            WallAlongZ(env, "WallE", half, -half, half, h, t, ProjectBootstrap.MatBrick);
+            Box(env, "Ceiling", new Vector3(0f, h + 0.05f, 0f), new Vector3(half * 2f + 0.5f, 0.1f, half * 2f + 0.5f), ProjectBootstrap.MatDarkWood);
+            for (int i = 0; i < 5; i++)
             {
-                float z = -3.6f + i * 3.4f;
-                if (PackExists(KF + "bookcaseOpen.fbx"))
-                {
-                    for (int s = 0; s < 2; s++)
-                    {
-                        float sz = z - 0.7f + s * 1.4f;
-                        GameObject sw = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(-7.45f, 0f, sz), FaceE, new Vector3(0.5f, 2.2f, 1.35f), ColliderMode.Box);
-                        SnapTo(sw, Vector3.left, -7.72f);
-                        FillShelves(env, sw, PresentModels, 0.28f, 3, 10 + i * 4 + s, true);
-
-                        GameObject se = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(7.45f, 0f, sz), FaceW, new Vector3(0.5f, 2.2f, 1.35f), ColliderMode.Box);
-                        SnapTo(se, Vector3.right, 7.72f);
-                        FillShelves(env, se, PresentModels, 0.28f, 3, 30 + i * 4 + s, true);
-                    }
-                }
-                else
-                {
-                    Box(env, "ShelfW" + i, new Vector3(-7.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
-                    Box(env, "ShelfE" + i, new Vector3(7.45f, 1.2f, z), new Vector3(0.5f, 2.4f, 3f), ProjectBootstrap.MatWood);
-                    for (int k = 0; k < 3; k++)
-                    {
-                        string m = k == 0 ? ProjectBootstrap.MatRed : (k == 1 ? ProjectBootstrap.MatGreen : ProjectBootstrap.MatGold);
-                        Box(env, "ParcelW", new Vector3(-7.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
-                        Box(env, "ParcelE", new Vector3(7.1f, 2.55f, z - 1f + k), new Vector3(0.35f, 0.3f, 0.45f), m, false);
-                    }
-                }
+                float bx = -4.4f + i * 2.2f;
+                Box(env, "RoofBeam", new Vector3(bx, h - 0.12f, 0f), new Vector3(0.24f, 0.24f, half * 2f + 0.1f), ProjectBootstrap.MatDarkWood, false);
             }
-            if (PackExists(KF + "cardboardBoxClosed.fbx"))
+            // Timber corner pillars
+            foreach (float px in new[] { -5.22f, 5.22f })
+                foreach (float pz in new[] { -5.22f, 5.22f })
+                    Box(env, "CornerTimber", new Vector3(px, h * 0.5f, pz), new Vector3(0.24f, h, 0.24f), ProjectBootstrap.MatDarkWood, false);
+
+            // Architectural trim: wainscoting (1.15m), brass/oak chair rail, baseboard, cream crown molding
+            BuildWallTrimX(env, "TrimN", 5.29f, -5.2f, 5.2f, h, -1f);
+            BuildWallTrimX(env, "TrimS", -5.29f, -5.2f, 5.2f, h, 1f);
+            BuildWallTrimZ(env, "TrimW", -5.29f, -5.2f, 5.2f, h, 1f);
+            BuildWallTrimZ(env, "TrimE", 5.29f, -5.2f, 5.2f, h, -1f);
+
+            // Glowing moonlit workshop windows with snow sills, cross muntins, and velvet curtains
+            BuildWindow(env, "WindowS_W", new Vector3(-3.0f, 2.15f, -5.28f), FaceN, 1.85f, 1.45f, ProjectBootstrap.MatVelvetGreen);
+            BuildWindow(env, "WindowS_E", new Vector3(3.0f, 2.15f, -5.28f), FaceN, 1.85f, 1.45f, ProjectBootstrap.MatVelvetGreen);
+            BuildWindow(env, "WindowW_N", new Vector3(-5.28f, 2.15f, 2.2f), FaceE, 1.75f, 1.40f, ProjectBootstrap.MatVelvetRed);
+            BuildWindow(env, "WindowE_N", new Vector3(5.28f, 2.15f, 2.2f), FaceW, 1.75f, 1.40f, ProjectBootstrap.MatVelvetRed);
+
+            // Framed winter storybook paintings
+            BuildFramedPainting(env, "Painting_Workshop1", new Vector3(0f, 2.25f, -5.27f), FaceN, 1.45f, 1.0f, ProjectBootstrap.MatPainting2);
+
+            // Brass wall sconces
+            BuildBrassSconce(env, new Vector3(-1.55f, 2.25f, 5.24f), FaceS);
+            BuildBrassSconce(env, new Vector3(1.95f, 2.25f, 5.24f), FaceS);
+            BuildBrassSconce(env, new Vector3(-5.24f, 2.25f, 0.0f), FaceE);
+            BuildBrassSconce(env, new Vector3(5.24f, 2.25f, -0.5f), FaceW);
+
+            // Toy shelves along West and East walls
+            if (PackExists(KF + "bookcaseOpen.fbx"))
             {
-                GameObject c1 = PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(-6.2f, 0f, -6.4f), 10f, new Vector3(0.85f, 0.75f, 0.85f), ColliderMode.Box);
-                PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-5.3f, 0f, -6.5f), 25f, new Vector3(0.75f, 0.65f, 0.75f), ColliderMode.Box);
-                PackFit(env, KH + "present-a-cube.fbx", new Vector3(-6.15f, TopY(c1), -6.4f), -15f, new Vector3(0.55f, 0.5f, 0.55f), ColliderMode.Box);
-                PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(6.3f, 0f, -6.4f), -20f, new Vector3(0.85f, 0.75f, 0.85f), ColliderMode.Box);
-                PackFit(env, KH + "present-b-rectangle.fbx", new Vector3(5.4f, 0f, -6.5f), 18f, new Vector3(0.65f, 0.45f, 0.65f), ColliderMode.Box);
+                for (int s = 0; s < 2; s++)
+                {
+                    float sz = -2.8f + s * 1.6f;
+                    GameObject sw = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(-4.95f, 0f, sz), FaceE, new Vector3(0.5f, 2.1f, 1.35f), ColliderMode.Box);
+                    SnapTo(sw, Vector3.left, -5.24f);
+                    FillShelves(env, sw, PresentModels, 0.28f, 3, 10 + s, true);
+
+                    GameObject se = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(4.95f, 0f, sz), FaceW, new Vector3(0.5f, 2.1f, 1.35f), ColliderMode.Box);
+                    SnapTo(se, Vector3.right, 5.24f);
+                    FillShelves(env, se, PresentModels, 0.28f, 3, 30 + s, true);
+                }
             }
             else
             {
-                Box(env, "Crate1", new Vector3(-6.2f, 0.4f, -6.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatWood);
-                Box(env, "Crate2", new Vector3(-5.3f, 0.35f, -6.5f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatWood, true, 20f);
-                Box(env, "Crate3", new Vector3(-6.1f, 1.15f, -6.4f), new Vector3(0.6f, 0.7f, 0.6f), ProjectBootstrap.MatRed, true, 10f);
-                Box(env, "Crate4", new Vector3(6.3f, 0.4f, -6.4f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatGreen);
+                Box(env, "ShelfW0", new Vector3(-4.95f, 1.1f, -2.0f), new Vector3(0.5f, 2.2f, 2.8f), ProjectBootstrap.MatWood);
+                Box(env, "ShelfE0", new Vector3(4.95f, 1.1f, -2.0f), new Vector3(0.5f, 2.2f, 2.8f), ProjectBootstrap.MatWood);
             }
-            BuildTree(env, new Vector3(6f, 0f, 6f), 1.0f);
-            PresentsAround(env, new Vector3(6f, 0f, 6f), 0.95f, 1.75f, 10, 101, 0.22f, 0.42f, 7.3f);
-            BuildFireplaceNorth(env, new Vector3(-5f, 0f, 7.8f)); // emissive embers only: hub keeps max 3 point lights
-            PackFit(env, KH + "wreath-decorated.fbx", new Vector3(-5f, 2.15f, 7.26f), FaceS + HolidayYaw, new Vector3(0.9f, 0.9f, 0.3f), ColliderMode.None);
-            PackFit(env, KH + "nutcracker.fbx", new Vector3(-3.3f, 0f, 7.1f), FaceS + HolidayYaw, new Vector3(0.55f, 1.15f, 0.55f), ColliderMode.Box);
-            PackFit(env, KH + "nutcracker.fbx", new Vector3(2.2f, 0f, 7.1f), FaceS + HolidayYaw, new Vector3(0.55f, 1.15f, 0.55f), ColliderMode.Box);
-            PackFit(env, KH + "snowman-hat.fbx", new Vector3(6.8f, 0f, 4.1f), FaceW + HolidayYaw, new Vector3(0.7f, 0.95f, 0.7f), ColliderMode.Box);
-            LightStrand(env, new Vector3(-7.3f, 0f, 7.68f), new Vector3(7.3f, 0f, 7.68f), 3.65f);
-            LightStrand(env, new Vector3(-7.68f, 0f, -7.2f), new Vector3(-7.68f, 0f, 7.2f), 3.65f);
-            LightStrand(env, new Vector3(7.68f, 0f, -7.2f), new Vector3(7.68f, 0f, 7.2f), 3.65f);
-            float[] lx = { -2.5f, 2.5f }, lz = { -2f, 2.5f };
+
+            if (PackExists(KF + "cardboardBoxClosed.fbx"))
+            {
+                GameObject c1 = PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(-4.3f, 0f, -4.4f), 10f, new Vector3(0.80f, 0.70f, 0.80f), ColliderMode.Box);
+                PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-3.5f, 0f, -4.5f), 25f, new Vector3(0.70f, 0.60f, 0.70f), ColliderMode.Box);
+                PackFit(env, KH + "present-a-cube.fbx", new Vector3(-4.25f, TopY(c1), -4.4f), -15f, new Vector3(0.50f, 0.45f, 0.50f), ColliderMode.Box);
+                PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(4.3f, 0f, -4.4f), -20f, new Vector3(0.80f, 0.70f, 0.80f), ColliderMode.Box);
+                PackFit(env, KH + "present-b-rectangle.fbx", new Vector3(3.5f, 0f, -4.5f), 18f, new Vector3(0.60f, 0.42f, 0.60f), ColliderMode.Box);
+            }
+
+            // 1) Custom 3D ChristmasTree.fbx + 3D Ornaments (Ornament_A/B/C.fbx) in the NE corner
+            BuildTree(env, new Vector3(3.85f, 0f, 3.85f), 0.95f);
+            PresentsAround(env, new Vector3(3.85f, 0f, 3.85f), 0.85f, 1.45f, 8, 101, 0.22f, 0.38f, 4.9f);
+
+            // 2) Custom 3D Fireplace.fbx against the North-West wall
+            BuildFireplaceNorth(env, new Vector3(-3.35f, 0f, 5.30f));
+            PackFit(env, KH + "wreath-decorated.fbx", new Vector3(-3.35f, 2.35f, 4.78f), FaceS + HolidayYaw, new Vector3(0.85f, 0.85f, 0.28f), ColliderMode.None);
+            PackFit(env, KH + "nutcracker.fbx", new Vector3(-1.85f, 0f, 4.75f), FaceS + HolidayYaw, new Vector3(0.55f, 1.15f, 0.55f), ColliderMode.Box);
+            PackFit(env, KH + "nutcracker.fbx", new Vector3(1.85f, 0f, 4.75f), FaceS + HolidayYaw, new Vector3(0.55f, 1.15f, 0.55f), ColliderMode.Box);
+            PackFit(env, KH + "snowman-hat.fbx", new Vector3(4.55f, 0f, 2.35f), FaceW + HolidayYaw, new Vector3(0.68f, 0.92f, 0.68f), ColliderMode.Box);
+
+            LightStrand(env, new Vector3(-5.0f, 0f, 5.20f), new Vector3(5.0f, 0f, 5.20f), 3.45f);
+            LightStrand(env, new Vector3(-5.20f, 0f, -4.9f), new Vector3(-5.20f, 0f, 4.9f), 3.45f);
+            LightStrand(env, new Vector3(5.20f, 0f, -4.9f), new Vector3(5.20f, 0f, 4.9f), 3.45f);
+
+            // Sculpted Brass Workshop Chandeliers
+            float[] lx = { -2.0f, 2.0f }, lz = { -1.6f, 1.8f };
             foreach (float x in lx)
                 foreach (float z in lz)
-                {
-                    Box(env, "LanternCord", new Vector3(x, 3.4f, z), new Vector3(0.02f, 1.2f, 0.02f), ProjectBootstrap.MatDark, false);
-                    Ball(env, "Lantern", new Vector3(x, 2.8f, z), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
-                }
+                    BuildBrassChandelier(env, new Vector3(x, 2.95f, z), h);
 
-            // Conveyor: Conveyor builds its own belt at runtime (no renderers here). Belt runs along -Z towards the sleigh.
+            // Conveyor: Conveyor builds its own belt at runtime. Belt runs along -Z towards the sleigh.
             var conveyor = new GameObject("Conveyor");
-            conveyor.transform.SetPositionAndRotation(new Vector3(-5.2f, 0f, 3f), Quaternion.Euler(0f, 180f, 0f));
+            conveyor.transform.SetPositionAndRotation(new Vector3(-3.35f, 0f, 0.6f), Quaternion.Euler(0f, 180f, 0f));
             conveyor.AddComponent<Conveyor>();
-            Box(env, "ChuteHood", new Vector3(-5.2f, 2.7f, 6.1f), new Vector3(1.8f, 0.25f, 1.4f), ProjectBootstrap.MatMetal, false);
-            Box(env, "ChutePostL", new Vector3(-6.2f, 1.35f, 6.6f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
-            Box(env, "ChutePostR", new Vector3(-4.2f, 1.35f, 6.6f), new Vector3(0.12f, 2.7f, 0.12f), ProjectBootstrap.MatMetal);
+            Box(env, "ChuteHood", new Vector3(-3.35f, 2.45f, 3.6f), new Vector3(1.75f, 0.26f, 1.35f), ProjectBootstrap.MatBrass, false);
+            Box(env, "ChuteTrim", new Vector3(-3.35f, 2.30f, 3.6f), new Vector3(1.85f, 0.08f, 1.45f), ProjectBootstrap.MatRed, false);
+            Box(env, "ChutePostL", new Vector3(-4.25f, 1.20f, 4.0f), new Vector3(0.11f, 2.4f, 0.11f), ProjectBootstrap.MatMetal);
+            Box(env, "ChutePostR", new Vector3(-2.45f, 1.20f, 4.0f), new Vector3(0.11f, 2.4f, 0.11f), ProjectBootstrap.MatMetal);
 
-            // Order board on the north wall.
+            // 3) Custom 3D OrderBoard.fbx (converted from 77580a7346fea1e2a5b1cc1c0b68d3e7.glb) centered on the North wall!
             var board = new GameObject("OrderBoard");
-            board.transform.position = new Vector3(0f, 0f, 7.1f);
+            board.transform.position = new Vector3(0f, 0f, 4.65f);
             board.AddComponent<OrderBoardStation>();
-            Box(board.transform, "Board", new Vector3(0f, 1.9f, 7.7f), new Vector3(3f, 1.8f, 0.12f), ProjectBootstrap.MatDarkWood);
-            Box(board.transform, "BoardFrame", new Vector3(0f, 2.86f, 7.66f), new Vector3(3.2f, 0.12f, 0.16f), ProjectBootstrap.MatGold, false);
-            for (int i = 0; i < 3; i++)
-                Box(board.transform, "OrderNote" + i, new Vector3(-0.95f + i * 0.95f, 1.9f, 7.63f), new Vector3(0.65f, 0.85f, 0.02f), ProjectBootstrap.MatPaper, false);
+            GameObject boardModel = Model(board.transform, "Hub/OrderBoard.fbx", "OrderBoardModel", new Vector3(0f, 1.05f, 5.16f), 0f, 1.05f);
+            if (boardModel != null)
+            {
+                SnapTo(boardModel, Vector3.forward, 5.26f);
+            }
+            else
+            {
+                Box(board.transform, "Board", new Vector3(0f, 1.85f, 5.18f), new Vector3(2.8f, 1.65f, 0.12f), ProjectBootstrap.MatDarkWood);
+                Box(board.transform, "BoardFelt", new Vector3(0f, 1.85f, 5.11f), new Vector3(2.55f, 1.4f, 0.03f), ProjectBootstrap.MatVelvetGreen, false);
+            }
             MakeStaticChildren(board);
 
-            // Workbench (upgrades).
+            // 4) Custom 3D Workbench.fbx (upgrades) on the East side.
             var bench = new GameObject("Workbench");
-            bench.transform.position = new Vector3(5.2f, 0f, 1.5f);
+            bench.transform.position = new Vector3(3.45f, 0f, 0.65f);
             bench.AddComponent<WorkbenchStation>();
-            GameObject benchModel = Model(bench.transform, "Hub/Workbench.fbx", "WorkbenchModel", new Vector3(5.2f, 0f, 1.5f), -90f, 1.3f);
+            GameObject benchModel = Model(bench.transform, "Hub/Workbench.fbx", "WorkbenchModel", new Vector3(3.45f, 0f, 0.65f), -90f, 1.35f);
             if (benchModel != null)
             {
                 Bounds bb = BoundsOf(benchModel);
@@ -233,36 +284,32 @@ namespace SilentNight.EditorTools
             }
             else
             {
-                Box(bench.transform, "BenchTop", new Vector3(5.2f, 0.9f, 1.5f), new Vector3(1.2f, 0.1f, 2.6f), ProjectBootstrap.MatWood);
-                foreach (float dx in new[] { -0.5f, 0.5f })
-                    foreach (float dz in new[] { -1.15f, 1.15f })
-                        Box(bench.transform, "BenchLeg", new Vector3(5.2f + dx, 0.425f, 1.5f + dz), new Vector3(0.1f, 0.85f, 0.1f), ProjectBootstrap.MatDarkWood);
-                Box(bench.transform, "DemoJetpack", new Vector3(5.2f, 1.2f, 0.8f), new Vector3(0.45f, 0.5f, 0.3f), ProjectBootstrap.MatMetal, false);
-                Box(bench.transform, "DemoBoot", new Vector3(5.2f, 1.05f, 2.2f), new Vector3(0.25f, 0.2f, 0.4f), ProjectBootstrap.MatRed, false);
-                Box(bench.transform, "ToolRack", new Vector3(5.9f, 1.6f, 1.5f), new Vector3(0.08f, 1.2f, 2.4f), ProjectBootstrap.MatDarkWood, false);
+                Box(bench.transform, "BenchTop", new Vector3(3.45f, 0.9f, 0.65f), new Vector3(1.2f, 0.1f, 2.2f), ProjectBootstrap.MatWood);
             }
             MakeStaticChildren(bench);
 
-            // Sleigh with launch pad.
+            // Sculpted Santa's Sleigh with golden runners, trim, lanterns & launch pad.
             var sleigh = new GameObject("Sleigh");
-            sleigh.transform.position = new Vector3(0f, 0f, -4.8f);
+            sleigh.transform.position = new Vector3(0f, 0f, -3.1f);
             sleigh.AddComponent<SleighLoadZone>();
-            Box(sleigh.transform, "RunnerL", new Vector3(-0.75f, 0.08f, -4.8f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "RunnerR", new Vector3(0.75f, 0.08f, -4.8f), new Vector3(0.12f, 0.16f, 3.6f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "Body", new Vector3(0f, 0.65f, -4.8f), new Vector3(1.7f, 0.8f, 2.8f), ProjectBootstrap.MatRed);
-            Box(sleigh.transform, "SeatBack", new Vector3(0f, 1.25f, -6.05f), new Vector3(1.7f, 0.7f, 0.3f), ProjectBootstrap.MatRed);
-            Box(sleigh.transform, "FrontCurl", new Vector3(0f, 0.75f, -3.25f), new Vector3(1.7f, 0.6f, 0.2f), ProjectBootstrap.MatGold);
-            Box(sleigh.transform, "SackDecor", new Vector3(0f, 1.25f, -5.3f), new Vector3(1.0f, 0.6f, 0.9f), ProjectBootstrap.MatFabric, false);
-            Disc(env, "LaunchPad", new Vector3(0f, 0.012f, -4.8f), 4.4f, 0.02f, ProjectBootstrap.MatGold, false);
+            BuildDetailedSleigh(sleigh.transform, new Vector3(0f, 0f, -3.1f), 0.92f);
+            Disc(env, "LaunchPadOuter", new Vector3(0f, 0.010f, -3.1f), 4.0f, 0.02f, ProjectBootstrap.MatBrass, false);
+            Disc(env, "LaunchPadInner", new Vector3(0f, 0.016f, -3.1f), 3.6f, 0.02f, ProjectBootstrap.MatVelvetRed, false);
             MakeStaticChildren(sleigh);
 
-            // Lights: max 3 point lights, no shadows.
-            Point(env, "ConveyorLight", new Vector3(-5.2f, 3.0f, 3f), new Color(1f, 0.72f, 0.4f), 6f, 11f);
-            Point(env, "WorkbenchLight", new Vector3(5.2f, 3.0f, 1.5f), new Color(0.65f, 0.85f, 1f), 5f, 10f);
-            Point(env, "SleighLight", new Vector3(0f, 3.2f, -2.5f), new Color(1f, 0.78f, 0.5f), 7f, 13f);
+            // Warm shadow-casting key lights
+            Light convL = Point(env, "ConveyorLight", new Vector3(-3.1f, 2.9f, 1.2f), new Color(1f, 0.78f, 0.48f), 7f, 12f);
+            convL.shadows = LightShadows.Soft;
+            Light benchL = Point(env, "WorkbenchLight", new Vector3(3.1f, 2.9f, 0.8f), new Color(0.95f, 0.88f, 0.78f), 7f, 12f);
+            benchL.shadows = LightShadows.Soft;
+            Light boardL = Point(env, "OrderBoardLight", new Vector3(0f, 2.75f, 4.1f), new Color(1f, 0.86f, 0.62f), 6.5f, 10f);
+            boardL.shadows = LightShadows.Soft;
+            Light sleighL = Point(env, "SleighLight", new Vector3(0f, 3.0f, -2.2f), new Color(1f, 0.82f, 0.55f), 8f, 13f);
+            sleighL.shadows = LightShadows.Soft;
+            Point(env, "FireplaceGlow", new Vector3(-3.35f, 0.75f, 4.4f), new Color(1f, 0.55f, 0.22f), 5.5f, 9f);
 
-            // Player.
-            CreateSpawnAndPlayer(new Vector3(0f, 0f, 0.5f), Quaternion.identity);
+            // Player spawns in the cozy center with clear path North (+Z) for smoke tests.
+            CreateSpawnAndPlayer(new Vector3(0f, 0f, 0.2f), Quaternion.identity);
 
             MakeStatic(env.gameObject);
             SaveAndBake(scene, HubPath);
@@ -280,14 +327,28 @@ namespace SilentNight.EditorTools
             Lightmapping.lightingSettings = lighting;
 
             SetupEnvironmentLighting(
-                new Color(0.22f, 0.30f, 0.48f), new Color(0.15f, 0.21f, 0.34f), new Color(0.08f, 0.10f, 0.16f),
-                true, new Color(0.10f, 0.14f, 0.25f), 0.010f);
+                new Color(0.28f, 0.38f, 0.58f), new Color(0.20f, 0.27f, 0.42f), new Color(0.12f, 0.16f, 0.24f),
+                true, new Color(0.08f, 0.12f, 0.24f), 0.006f);
             CreateCamera(new Vector3(0f, 3f, -6f), Quaternion.Euler(15f, 0f, 0f));
-            CreateMoonlight(0.9f, Quaternion.Euler(50f, -30f, 0f));
+            CreateMoonlight(1.1f, Quaternion.Euler(48f, -32f, 0f));
             CreateGlobalVolume();
 
             Transform env = new GameObject("Environment").transform;
             Box(env, "StreetSnow", new Vector3(20f, -8.3f, 5f), new Vector3(160f, 0.6f, 120f), ProjectBootstrap.MatSnow);
+
+            // Glowing Full Moon & Starry Winter Sky backdrop
+            Ball(env, "FullMoon", new Vector3(52f, 44f, 68f), Vector3.one * 9.5f, ProjectBootstrap.MatEmissiveGold);
+            Ball(env, "MoonHalo", new Vector3(52f, 44f, 70f), Vector3.one * 15f, ProjectBootstrap.MatEmissiveMoon);
+            var starRng = new System.Random(42);
+            for (int s = 0; s < 75; s++)
+            {
+                float sa = (float)(starRng.NextDouble() * Mathf.PI * 2f);
+                float sd = 65f + (float)starRng.NextDouble() * 45f;
+                float sy = 16f + (float)starRng.NextDouble() * 42f;
+                float sr = 0.22f + (float)starRng.NextDouble() * 0.35f;
+                Ball(env, "Star", new Vector3(18f + Mathf.Cos(sa) * sd, sy, 8f + Mathf.Sin(sa) * sd),
+                    Vector3.one * sr, s % 3 == 0 ? ProjectBootstrap.MatEmissiveGold : ProjectBootstrap.MatEmissiveMoon);
+            }
 
             const int cols = 5, rows = 3;
             const float w = 8f, d = 7f, gap = 1.0f;
@@ -310,10 +371,31 @@ namespace SilentNight.EditorTools
                     string tag = r + "_" + c;
                     // Building body + snowy roof deck (deck top = y).
                     Box(env, "Body_" + tag, new Vector3(x, y - 4.1f, z), new Vector3(w, 8f, d), ProjectBootstrap.MatBrick);
+                    // Architectural cornice & snow overhang around roof eaves
+                    Box(env, "Cornice_" + tag, new Vector3(x, y - 0.24f, z), new Vector3(w + 0.24f, 0.14f, d + 0.24f), ProjectBootstrap.MatCreamTrim, false);
+                    // Glowing cottage windows on building facades (2 stories)
+                    for (int wy = 0; wy < 2; wy++)
+                    {
+                        float winY = y - 1.55f - wy * 2.2f;
+                        for (int wx = -1; wx <= 1; wx += 2)
+                        {
+                            float winX = x + wx * 2.1f;
+                            string winMat = ((r + c + wy + wx) % 3 == 0) ? ProjectBootstrap.MatEmissiveGold : ProjectBootstrap.MatEmissiveWarm;
+                            // South & North facade windows
+                            Box(env, "WinFrameS", new Vector3(winX, winY, z - d * 0.5f - 0.02f), new Vector3(1.05f, 1.25f, 0.06f), ProjectBootstrap.MatCreamTrim, false);
+                            Box(env, "WinGlassS", new Vector3(winX, winY, z - d * 0.5f - 0.04f), new Vector3(0.85f, 1.05f, 0.04f), winMat, false);
+                            Box(env, "WinSillS", new Vector3(winX, winY - 0.64f, z - d * 0.5f - 0.08f), new Vector3(1.15f, 0.10f, 0.16f), ProjectBootstrap.MatSnow, false);
+
+                            Box(env, "WinFrameN", new Vector3(winX, winY, z + d * 0.5f + 0.02f), new Vector3(1.05f, 1.25f, 0.06f), ProjectBootstrap.MatCreamTrim, false);
+                            Box(env, "WinGlassN", new Vector3(winX, winY, z + d * 0.5f + 0.04f), new Vector3(0.85f, 1.05f, 0.04f), winMat, false);
+                        }
+                    }
+
                     GameObject deck = Box(env, "Deck_" + tag, new Vector3(x, y - 0.1f, z), new Vector3(w, 0.2f, d), ProjectBootstrap.MatSnow);
                     deck.AddComponent<SurfaceTag>().Surface = SurfaceType.Default;
-                    // Low parapet on the street side.
+                    // Low parapet on the street side + snow cap.
                     Box(env, "Parapet_" + tag, new Vector3(x, y + 0.15f, z - d * 0.5f + 0.1f), new Vector3(w, 0.3f, 0.2f), ProjectBootstrap.MatDarkWood, true);
+                    Box(env, "ParapetSnow_" + tag, new Vector3(x, y + 0.32f, z - d * 0.5f + 0.1f), new Vector3(w + 0.06f, 0.06f, 0.26f), ProjectBootstrap.MatSnow, false);
 
                     // Ice patch on every third roof.
                     if ((r * cols + c) % 3 == 1)
@@ -325,7 +407,8 @@ namespace SilentNight.EditorTools
 
                     // Fairy lights along the street edge.
                     for (int k = 0; k < 6; k++)
-                        Ball(env, "Fairy", new Vector3(x - w * 0.5f + 0.8f + k * 1.3f, y + 0.45f, z - d * 0.5f + 0.15f), Vector3.one * 0.12f, ProjectBootstrap.MatEmissiveWarm);
+                        Ball(env, "Fairy", new Vector3(x - w * 0.5f + 0.8f + k * 1.3f, y + 0.45f, z - d * 0.5f + 0.15f), Vector3.one * 0.13f,
+                            k % 2 == 0 ? ProjectBootstrap.MatEmissiveWarm : ProjectBootstrap.MatEmissiveGold);
 
                     // Antenna / decor.
                     if ((r + c) % 2 == 0)
@@ -334,36 +417,71 @@ namespace SilentNight.EditorTools
                         Box(env, "AntennaBar", new Vector3(x + w * 0.35f, y + 1.5f, z + d * 0.3f), new Vector3(0.8f, 0.05f, 0.05f), ProjectBootstrap.MatMetal, false);
                     }
 
-                    // Chimney with a floating number label (numbers are assigned at runtime).
-                    float cx = x + (float)(rng.NextDouble() - 0.5) * (w - 3f);
-                    float cz = z + (float)(rng.NextDouble() - 0.5) * (d - 3f) + 0.4f;
+                    // Code-customized 3D Dormer Windows & Glowing Skylights per roof
+                    float dormerScale = 0.88f + ((r * 3 + c * 5) % 4) * 0.07f;
+                    float dormerX = x + ((r + c) % 2 == 0 ? -1.85f : 1.85f);
+                    float dormerZ = z + d * 0.5f - 0.95f;
+                    GameObject dormer1 = Model(env, "Rooftop/DormerWindow.fbx", "Dormer_" + tag, new Vector3(dormerX, y, dormerZ), 180f, dormerScale);
+                    if (dormer1 != null)
+                    {
+                        var dbc = dormer1.AddComponent<BoxCollider>();
+                        dbc.center = new Vector3(0f, 0.8f, 0f);
+                        dbc.size = new Vector3(1.8f, 1.6f, 1.6f);
+                        Point(env, "DormerGlow_" + tag, new Vector3(dormerX, y + 0.75f, dormerZ - 0.85f), new Color(1f, 0.78f, 0.42f), 2.2f, 5.5f);
+                    }
+                    // Second smaller dormer on larger/alternate roofs
+                    if ((r + c) % 3 == 0)
+                    {
+                        float d2X = x - (dormerX - x) * 0.85f;
+                        GameObject dormer2 = Model(env, "Rooftop/DormerWindow.fbx", "DormerS_" + tag, new Vector3(d2X, y, z - d * 0.5f + 0.95f), 0f, dormerScale * 0.86f);
+                        if (dormer2 != null)
+                        {
+                            var dbc2 = dormer2.AddComponent<BoxCollider>();
+                            dbc2.center = new Vector3(0f, 0.8f, 0f);
+                            dbc2.size = new Vector3(1.8f, 1.6f, 1.6f);
+                        }
+                    }
+                    // Glowing skylight window embedded in roof deck (like reference image)
+                    if ((r * cols + c) % 2 == 0)
+                    {
+                        float skyX = x + (dormerX > x ? -1.75f : 1.75f);
+                        float skyZ = z - 0.9f;
+                        BuildRooftopSkylight(env, "Skylight_" + tag, new Vector3(skyX, y + 0.02f, skyZ),
+                            ((r + c) % 4 == 0) ? ProjectBootstrap.MatEmissiveGold : ProjectBootstrap.MatEmissiveWarm);
+                    }
+
+                    // Tall 3D Brick Chimney with snow cap, icicles, bolted brass plaque ("CHIMNEY Nº. X"), and Co-op Boost / Solo Ladder.
+                    float cx = x + (float)(rng.NextDouble() - 0.5) * (w - 3.4f);
+                    float cz = z + (float)(rng.NextDouble() - 0.5) * (d - 3.4f) + 0.35f;
                     chimPos[r, c] = new Vector2(cx, cz);
-                    GameObject ch = Box(env, "Chimney_" + tag, new Vector3(cx, y + 0.9f, cz), new Vector3(0.9f, 1.8f, 0.9f), ProjectBootstrap.MatBrick);
-                    Box(env, "ChimneyCap_" + tag, new Vector3(cx, y + 1.86f, cz), new Vector3(1.15f, 0.14f, 1.15f), ProjectBootstrap.MatSnow, false);
-                    Box(env, "ChimneyHole_" + tag, new Vector3(cx, y + 1.94f, cz), new Vector3(0.6f, 0.04f, 0.6f), ProjectBootstrap.MatDark, false);
+
+                    var ch = new GameObject("Chimney_" + tag);
+                    ch.transform.SetParent(env, false);
+                    ch.transform.position = new Vector3(cx, y + 0.9f, cz);
+                    var chCol = ch.AddComponent<BoxCollider>();
+                    chCol.size = new Vector3(0.92f, 1.85f, 0.92f);
+
+                    float chimYaw = ((r * 5 + c * 3) % 4) * 90f;
+                    float chimScaleXZ = 1.22f + ((r + c) % 3) * 0.06f;
+                    GameObject chimMesh = Model(ch.transform, "Rooftop/Chimney.fbx", "ChimneyMesh_" + tag, new Vector3(cx, y, cz), chimYaw, 1.0f);
+                    if (chimMesh != null)
+                    {
+                        chimMesh.transform.localScale = new Vector3(chimScaleXZ, 0.96f, chimScaleXZ);
+                    }
+                    else
+                    {
+                        Box(ch.transform, "ChimneyBrick_" + tag, new Vector3(cx, y + 0.9f, cz), new Vector3(0.9f, 1.8f, 0.9f), ProjectBootstrap.MatBrick, false);
+                        Box(ch.transform, "ChimneyCollar_" + tag, new Vector3(cx, y + 1.72f, cz), new Vector3(1.06f, 0.12f, 1.06f), ProjectBootstrap.MatCreamTrim, false);
+                        Box(ch.transform, "ChimneyCap_" + tag, new Vector3(cx, y + 1.86f, cz), new Vector3(1.15f, 0.14f, 1.15f), ProjectBootstrap.MatSnow, false);
+                    }
+                    Box(ch.transform, "ChimneyHole_" + tag, new Vector3(cx, y + 1.94f, cz), new Vector3(0.6f, 0.04f, 0.6f), ProjectBootstrap.MatDark, false);
+
                     var chim = ch.AddComponent<SilentNight.Rooftop.RooftopChimney>();
                     var smokeGo = new GameObject("ChimneySmoke");
                     smokeGo.transform.SetParent(ch.transform, false);
-                    smokeGo.transform.position = new Vector3(cx, y + 1.95f, cz);
+                    smokeGo.transform.position = new Vector3(cx, y + 2.05f, cz);
                     smokeGo.AddComponent<SilentNight.FX.ChimneySmoke>();
 
-                    var labelGo = new GameObject("NumberLabel");
-                    labelGo.transform.SetParent(ch.transform, false);
-                    labelGo.transform.position = new Vector3(cx, y + 2.6f, cz);
-                    labelGo.AddComponent<SilentNight.Rooftop.Billboard>();
-                    var tm = labelGo.AddComponent<TextMesh>();
-                    tm.text = "№ ?";
-                    tm.fontSize = 64;
-                    tm.characterSize = 0.04f;
-                    tm.anchor = TextAnchor.MiddleCenter;
-                    tm.alignment = TextAlignment.Center;
-                    tm.color = new Color(1f, 0.92f, 0.65f);
-                    if (font != null)
-                    {
-                        tm.font = font;
-                        labelGo.GetComponent<MeshRenderer>().sharedMaterial = font.material;
-                    }
-                    SetRef(chim, "numberLabel", tm);
                     chimneys.Add(chim);
                 }
             }
@@ -376,10 +494,7 @@ namespace SilentNight.EditorTools
             // Santa's sleigh parked on the first roof.
             var sleigh = new GameObject("ParkedSleigh").transform;
             sleigh.SetParent(env, false);
-            Box(sleigh, "RunnerL", new Vector3(-2.4f, 0.08f, 0f), new Vector3(0.12f, 0.16f, 3.2f), ProjectBootstrap.MatGold);
-            Box(sleigh, "RunnerR", new Vector3(-1.2f, 0.08f, 0f), new Vector3(0.12f, 0.16f, 3.2f), ProjectBootstrap.MatGold);
-            Box(sleigh, "Body", new Vector3(-1.8f, 0.6f, 0f), new Vector3(1.5f, 0.7f, 2.6f), ProjectBootstrap.MatRed);
-            Box(sleigh, "SeatBack", new Vector3(-1.8f, 1.1f, -1.2f), new Vector3(1.5f, 0.6f, 0.25f), ProjectBootstrap.MatRed);
+            BuildDetailedSleigh(sleigh, new Vector3(-1.8f, 0f, 0f), 0.88f);
 
             // Distant city silhouettes with lit windows.
             for (int i = 0; i < 60; i++)
@@ -396,8 +511,10 @@ namespace SilentNight.EditorTools
             // Falling snow.
             CreateSnowParticles(env, new Vector3(18f, 12f, 8f));
 
-            // Warm lights near the sleigh (the moon does the rest).
-            Point(env, "SleighGlow", new Vector3(-1.8f, 2.5f, 0f), new Color(1f, 0.75f, 0.45f), 3f, 8f);
+            // Warm lights across the rooftops so the snow & brick sparkle against the cool moonlight.
+            Point(env, "SleighGlow", new Vector3(-1.8f, 2.5f, 0f), new Color(1f, 0.78f, 0.45f), 4.5f, 10f);
+            Point(env, "RooftopWarmCenter", new Vector3(18f, 3.5f, 8f), new Color(1f, 0.76f, 0.42f), 4.0f, 18f);
+            Point(env, "RooftopWarmEast", new Vector3(34f, 3.5f, 8f), new Color(1f, 0.76f, 0.42f), 4.0f, 18f);
 
             // Respawn volume below the roofs.
             var kill = new GameObject("FallRespawn");
@@ -430,8 +547,23 @@ namespace SilentNight.EditorTools
             return go;
         }
 
-        /// <summary>Snowy ramps across the gap between side-by-side roofs (along X, no parapets there) that differ by
-        /// >= 0.3 m, on every other edge (checkerboard): run 1.75 m, 10–14.5°. The other gaps stay jumps.</summary>
+        private static void BuildRooftopSkylight(Transform parent, string name, Vector3 pos, string glassMat)
+        {
+            var root = new GameObject(name).transform;
+            root.SetParent(parent, false);
+            root.position = pos;
+            // Wooden outer frame
+            Box(root, "Frame", pos + new Vector3(0f, 0.04f, 0f), new Vector3(1.45f, 0.08f, 1.15f), ProjectBootstrap.MatDarkWood, false);
+            // Warm glowing panes
+            Box(root, "Glass", pos + new Vector3(0f, 0.06f, 0f), new Vector3(1.28f, 0.05f, 0.98f), glassMat, false);
+            // Mullion bars across the glass
+            Box(root, "Bar1", pos + new Vector3(-0.32f, 0.08f, 0f), new Vector3(0.05f, 0.04f, 1.02f), ProjectBootstrap.MatDarkWood, false);
+            Box(root, "Bar2", pos + new Vector3(0.32f, 0.08f, 0f), new Vector3(0.05f, 0.04f, 1.02f), ProjectBootstrap.MatDarkWood, false);
+            // Snow drift along the edge
+            Ball(root, "SnowRim", pos + new Vector3(0f, 0.07f, 0.56f), new Vector3(1.48f, 0.14f, 0.24f), ProjectBootstrap.MatSnow);
+        }
+
+        /// <summary>Crooked wooden plank gangways across rooftop gaps (with timber beams, crooked planks & snow patches).</summary>
         private static void BuildRooftopRamps(Transform env, float[,] heights, int rows, int cols, float w, float d, float gap)
         {
             float pitchX = w + gap, pitchZ = d + gap;
@@ -441,19 +573,72 @@ namespace SilentNight.EditorTools
                 {
                     if ((r + c) % 2 != 0) continue;
                     float yA = heights[r, c], yB = heights[r, c + 1];
-                    if (Mathf.Abs(yA - yB) < 0.29f) continue;
                     float edgeA = c * pitchX + w * 0.5f, edgeB = edgeA + gap;
-                    float z = r * pitchZ + (r % 2 == 0 ? -1f : 1f);
-                    Vector3 low, high;
-                    if (yA < yB) { low = new Vector3(edgeA - 0.7f, yA, z); high = new Vector3(edgeB + 0.05f, yB, z); }
-                    else { low = new Vector3(edgeB + 0.7f, yB, z); high = new Vector3(edgeA - 0.05f, yA, z); }
+                    float z = r * pitchZ + (r % 2 == 0 ? -1.1f : 1.1f);
+                    Vector3 low = new Vector3(edgeA - 0.45f, yA + 0.02f, z);
+                    Vector3 high = new Vector3(edgeB + 0.45f, yB + 0.02f, z);
+                    BuildWoodenPlankBridge(env, $"PlankBridge_{r}_{c}", low, high, 1.25f);
+                }
+            }
+        }
 
-                    GameObject ramp = Slab(env, $"SnowRamp_{r}_{c}", low, high, 1.2f, 0.2f, ProjectBootstrap.MatSnow);
-                    ramp.AddComponent<SurfaceTag>().Surface = SurfaceType.Default;
-                    // Snow lumps along the sides (decor).
-                    Vector3 mid = (low + high) * 0.5f;
-                    Ball(env, "RampSnowL", mid + new Vector3(0f, 0.02f, -0.62f), new Vector3(1.4f, 0.18f, 0.22f), ProjectBootstrap.MatSnow);
-                    Ball(env, "RampSnowR", mid + new Vector3(0f, 0.02f, 0.62f), new Vector3(1.4f, 0.18f, 0.22f), ProjectBootstrap.MatSnow);
+        private static void BuildWoodenPlankBridge(Transform parent, string name, Vector3 from, Vector3 to, float width)
+        {
+            Vector3 dir = to - from;
+            float len = dir.magnitude;
+            if (len < 0.1f) return;
+            Quaternion rot = Quaternion.LookRotation(dir / len, Vector3.up);
+            Vector3 mid = (from + to) * 0.5f;
+
+            var bridge = new GameObject(name).transform;
+            bridge.SetParent(parent, false);
+            bridge.SetPositionAndRotation(mid, rot);
+
+            // Walkable collider slab
+            var colGo = new GameObject("BridgeCollider");
+            colGo.transform.SetParent(bridge, false);
+            var bc = colGo.AddComponent<BoxCollider>();
+            bc.center = new Vector3(0f, -0.04f, 0f);
+            bc.size = new Vector3(width, 0.14f, len);
+            colGo.AddComponent<SurfaceTag>().Surface = SurfaceType.Wood;
+
+            // Use custom 3D PlankBridge model if present (native length along X is ~2.19m, width along Y/Z is ~1.18m)
+            GameObject bridgeMesh = Model(bridge, "Rooftop/PlankBridge.fbx", "PlankBridgeMesh", mid + rot * new Vector3(0f, -0.14f, 0f), 0f, 1.0f);
+            if (bridgeMesh != null)
+            {
+                bridgeMesh.transform.rotation = rot * Quaternion.Euler(0f, 90f, 0f);
+                bridgeMesh.transform.localScale = new Vector3(len / 2.18f, 1.0f, width / 1.18f);
+                return;
+            }
+
+            // Two longitudinal timber support beams underneath
+            float beamOffset = width * 0.36f;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                GameObject beam = Box(bridge, "Beam", mid + rot * new Vector3(s * beamOffset, -0.09f, 0f),
+                    new Vector3(0.11f, 0.11f, len * 0.98f), ProjectBootstrap.MatDarkWood, false);
+                beam.transform.rotation = rot;
+            }
+
+            // 8 crooked wooden planks + snow patches on top
+            int plankCount = 8;
+            float step = len / plankCount;
+            for (int i = 0; i < plankCount; i++)
+            {
+                float lz = -len * 0.5f + (i + 0.5f) * step;
+                float tiltYaw = ((i * 37) % 7 - 3) * 1.4f;
+                float pw = width * (0.95f + ((i * 13) % 5) * 0.02f);
+                string mat = (i % 2 == 0) ? ProjectBootstrap.MatWood : ProjectBootstrap.MatDarkWood;
+
+                GameObject plank = Box(bridge, "Plank_" + i, mid + rot * new Vector3(0f, -0.02f, lz),
+                    new Vector3(pw, 0.055f, step * 0.84f), mat, false);
+                plank.transform.rotation = rot * Quaternion.Euler(0f, tiltYaw, 0f);
+
+                if (i % 2 == 0)
+                {
+                    float sx = (i % 4 == 0 ? -1f : 1f) * (width * 0.22f);
+                    Ball(bridge, "PlankSnow_" + i, mid + rot * new Vector3(sx, 0.02f, lz),
+                        new Vector3(pw * 0.44f, 0.055f, step * 0.68f), ProjectBootstrap.MatSnow);
                 }
             }
         }
@@ -509,10 +694,20 @@ namespace SilentNight.EditorTools
                 for (int k = 0; k < stepH.Length; k++)
                     Box(env, $"PerchCrate_{tag}_{k}", new Vector3(px, y + stepH[k] * 0.5f, z - 2.0f + k * 0.9f), new Vector3(0.9f, stepH[k], 0.9f),
                         k % 2 == 0 ? ProjectBootstrap.MatWood : ProjectBootstrap.MatDarkWood, true, k * 4f);
-                Box(env, "PerchStand_" + tag, new Vector3(px, y + 1.0f, z + 0.85f), new Vector3(1.2f, 2.0f, 1.2f), ProjectBootstrap.MatMetal);
-                Box(env, "PerchSnow_" + tag, new Vector3(px, y + 1.97f, z + 0.85f), new Vector3(1.3f, 0.06f, 1.3f), ProjectBootstrap.MatSnow, false);
-                Box(env, "PerchFlagPole_" + tag, new Vector3(px + 0.5f, y + 2.5f, z + 0.4f), new Vector3(0.04f, 1.0f, 0.04f), ProjectBootstrap.MatMetal, false);
-                Box(env, "PerchFlag_" + tag, new Vector3(px + 0.5f, y + 2.85f, z + 0.6f), new Vector3(0.02f, 0.25f, 0.4f), ProjectBootstrap.MatRed, false);
+
+                // Custom 3D Wooden Water Tank barrel on timber stand (fallback to box if missing)
+                GameObject wt = Model(env, "Rooftop/WaterTank.fbx", "WaterTank_" + tag, new Vector3(px, y, z + 0.85f), i * 90f, 0.95f);
+                if (wt != null)
+                {
+                    var wtCol = wt.AddComponent<BoxCollider>();
+                    wtCol.center = new Vector3(0f, 1.05f, 0f);
+                    wtCol.size = new Vector3(1.45f, 2.1f, 1.45f);
+                }
+                else
+                {
+                    Box(env, "PerchStand_" + tag, new Vector3(px, y + 1.0f, z + 0.85f), new Vector3(1.2f, 2.0f, 1.2f), ProjectBootstrap.MatMetal);
+                    Box(env, "PerchSnow_" + tag, new Vector3(px, y + 1.97f, z + 0.85f), new Vector3(1.3f, 0.06f, 1.3f), ProjectBootstrap.MatSnow, false);
+                }
 
                 SnowCushionAt(env, "SnowDrift_Perch_" + tag, new Vector3(px, y, z + 2.5f), new Vector2(1.6f, 1.8f));
             }
@@ -601,10 +796,10 @@ namespace SilentNight.EditorTools
 
             // Cozy defaults (HouseMoodController re-applies cozy/spooky at runtime).
             SetupEnvironmentLighting(
-                new Color(0.55f, 0.42f, 0.32f), new Color(0.42f, 0.30f, 0.22f), new Color(0.20f, 0.14f, 0.10f),
-                true, new Color(0.25f, 0.18f, 0.14f), 0.012f);
+                new Color(0.60f, 0.48f, 0.36f), new Color(0.45f, 0.34f, 0.25f), new Color(0.24f, 0.18f, 0.14f),
+                true, new Color(0.22f, 0.16f, 0.14f), 0.006f);
             CreateCamera(new Vector3(6f, 2.5f, 3.5f), Quaternion.Euler(15f, 90f, 0f));
-            CreateMoonlight(0.25f, Quaternion.Euler(50f, 30f, 0f));
+            CreateMoonlight(0.38f, Quaternion.Euler(50f, 30f, 0f));
             CreateGlobalVolume();
 
             Transform env = new GameObject("Environment").transform;
@@ -615,40 +810,82 @@ namespace SilentNight.EditorTools
             var spookyOnly = new List<GameObject>();
 
             // ---- floors (top at y = 0), one per room with its surface ----
-            Floor(env, "Floor_Living", 0f, 12f, 0f, 11f, ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
+            Floor(env, "Floor_Living", 0f, 12f, 0f, 11f, ProjectBootstrap.MatWood, SurfaceType.Wood);
+            BuildNordicRug(env, "LivingRoomRug", new Vector3(5.8f, 0f, 5.8f), new Vector2(8.8f, 8.2f));
             Floor(env, "Floor_Kitchen", 0f, 12f, -11f, 0f, ProjectBootstrap.MatTile, SurfaceType.Tile);
             Floor(env, "Floor_Hallway", -3.5f, 0f, -11f, 11f, ProjectBootstrap.MatWood, SurfaceType.Wood);
+            BuildNordicRug(env, "HallRunnerRug", new Vector3(-1.75f, 0f, -6.5f), new Vector2(1.6f, 6.2f));
             Floor(env, "Floor_Bedroom", -12f, -3.5f, 4f, 11f, ProjectBootstrap.MatWood, SurfaceType.Wood);
             Floor(env, "Floor_Study", -12f, -3.5f, 0.5f, 4f, ProjectBootstrap.MatDarkWood, SurfaceType.Wood);
             Floor(env, "Floor_Garage", -12f, -3.5f, -11f, 0.5f, ProjectBootstrap.MatConcrete, SurfaceType.Default);
             Box(env, "SnowGround", new Vector3(0f, -0.25f, 0f), new Vector3(80f, 0.3f, 80f), ProjectBootstrap.MatSnow);
 
-            // ---- walls: 3 m high; exterior 0.3, interior 0.2; doorways 1.4 x 2.2 ----
-            const float h = 3f, ext = 0.3f, inner = 0.2f;
-            string wall = ProjectBootstrap.MatWall;
-            WallAlongX(env, "Ext_N", 11f, -12.15f, 12.15f, h, ext, wall);
-            WallAlongX(env, "Ext_S", -11f, -12.15f, 12.15f, h, ext, wall);
-            WallAlongZ(env, "Ext_W", -12f, -11f, 11f, h, ext, wall);
-            WallAlongZ(env, "Ext_E", 12f, -11f, 11f, h, ext, wall);
-            WallAlongZ(env, "Wall_Hall_East", 0f, -11f, 11f, h, inner, wall, 4f, -5f);           // → living, kitchen
-            WallAlongX(env, "Wall_Living_Kitchen", 0f, 0f, 12f, h, inner, wall, 3f);           // living ↔ kitchen
-            WallAlongZ(env, "Wall_Hall_West", -3.5f, -11f, 11f, h, inner, wall, 7.5f, 2.25f, -5f); // → bedroom, study, garage
-            WallAlongX(env, "Wall_Bedroom_Study", 4f, -12f, -3.5f, h, inner, wall);
+            // ---- walls: 4.2 m high so rooms feel spacious and ceiling beams never block the camera ----
+            const float h = 4.2f, ext = 0.3f, inner = 0.2f;
+            // Per-room exterior & interior walls with vintage striped wallpapers
+            WallAlongX(env, "Ext_N_Bedroom", 11f, -12.15f, -3.5f, h, ext, ProjectBootstrap.MatWallNavy);
+            WallAlongX(env, "Ext_N_Hall", 11f, -3.5f, 0f, h, ext, ProjectBootstrap.MatWallOchre);
+            WallAlongX(env, "Ext_N_Living", 11f, 0f, 12.15f, h, ext, ProjectBootstrap.MatWallSpruce);
+
+            WallAlongX(env, "Ext_S_Garage", -11f, -12.15f, -3.5f, h, ext, ProjectBootstrap.MatConcrete);
+            WallAlongX(env, "Ext_S_Hall", -11f, -3.5f, 0f, h, ext, ProjectBootstrap.MatWallOchre);
+            WallAlongX(env, "Ext_S_Kitchen", -11f, 0f, 12.15f, h, ext, ProjectBootstrap.MatWall);
+
+            WallAlongZ(env, "Ext_W_Garage", -12f, -11f, 0.5f, h, ext, ProjectBootstrap.MatConcrete);
+            WallAlongZ(env, "Ext_W_Study", -12f, 0.5f, 4f, h, ext, ProjectBootstrap.MatWallBurgundy);
+            WallAlongZ(env, "Ext_W_Bedroom", -12f, 4f, 11f, h, ext, ProjectBootstrap.MatWallNavy);
+
+            WallAlongZ(env, "Ext_E_Kitchen", 12f, -11f, 0f, h, ext, ProjectBootstrap.MatWall);
+            WallAlongZ(env, "Ext_E_Living", 12f, 0f, 11f, h, ext, ProjectBootstrap.MatWallSpruce);
+
+            WallAlongZ(env, "Wall_Hall_East_S", 0f, -11f, 0f, h, inner, ProjectBootstrap.MatWallOchre, -5f);      // → kitchen
+            WallAlongZ(env, "Wall_Hall_East_N", 0f, 0f, 11f, h, inner, ProjectBootstrap.MatWallSpruce, 4f);       // → living
+            WallAlongX(env, "Wall_Living_Kitchen", 0f, 0f, 12f, h, inner, ProjectBootstrap.MatWallSpruce, 3f);    // living ↔ kitchen
+            WallAlongZ(env, "Wall_Hall_West_S", -3.5f, -11f, 0.5f, h, inner, ProjectBootstrap.MatWallOchre, -5f); // → garage
+            WallAlongZ(env, "Wall_Hall_West_M", -3.5f, 0.5f, 4f, h, inner, ProjectBootstrap.MatWallBurgundy, 2.25f); // → study
+            WallAlongZ(env, "Wall_Hall_West_N", -3.5f, 4f, 11f, h, inner, ProjectBootstrap.MatWallNavy, 7.5f);    // → bedroom
+            WallAlongX(env, "Wall_Bedroom_Study", 4f, -12f, -3.5f, h, inner, ProjectBootstrap.MatWallNavy);
 
             // Creaky physical doors: push slowly = silent, normal = creak, slam = БАХ! (living room and Grandpa's bedroom).
             SilentNight.Stealth.CreakyDoor.Create(env, new Vector3(0f, 0f, 3.3f), DoorW, DoorH, -90f, Mat(ProjectBootstrap.MatDarkWood));
             SilentNight.Stealth.CreakyDoor.Create(env, new Vector3(-3.5f, 0f, 6.8f), DoorW, DoorH, -90f, Mat(ProjectBootstrap.MatDarkWood));
-            WallAlongX(env, "Wall_Study_Garage", 0.5f, -12f, -3.5f, h, inner, wall);
+            WallAlongX(env, "Wall_Study_Garage", 0.5f, -12f, -3.5f, h, inner, ProjectBootstrap.MatWallBurgundy);
 
-            // Ceiling with wooden beams (the rooms were open to a black void).
-            Box(env, "Ceiling", new Vector3(0f, h + 0.05f, 0f), new Vector3(24.6f, 0.1f, 22.6f), ProjectBootstrap.MatWall);
+            // Architectural trim: wainscoting + chair rail + baseboards + crown molding along exterior walls
+            BuildWallTrimX(env, "Trim_LivingN", 10.82f, 0.2f, 11.8f, h, -1f);
+            BuildWallTrimZ(env, "Trim_LivingE", 11.82f, 0.2f, 10.8f, h, -1f);
+            BuildWallTrimX(env, "Trim_KitchenS", -10.82f, 0.2f, 11.8f, h, 1f);
+            BuildWallTrimZ(env, "Trim_KitchenE", 11.82f, -10.8f, -0.2f, h, -1f);
+            BuildWallTrimX(env, "Trim_BedroomN", 10.82f, -11.8f, -3.7f, h, -1f);
+            BuildWallTrimZ(env, "Trim_BedroomW", -11.82f, 4.2f, 10.8f, h, 1f);
+            BuildWallTrimZ(env, "Trim_StudyW", -11.82f, 0.7f, 3.8f, h, 1f);
+
+            // Glowing Moonlit Windows with velvet curtains & snowy sills
+            BuildWindow(env, "Win_LivingN1", new Vector3(2.8f, 2.35f, 10.80f), FaceS, 1.85f, 1.55f, ProjectBootstrap.MatVelvetRed);
+            BuildWindow(env, "Win_LivingN2", new Vector3(6.2f, 2.35f, 10.80f), FaceS, 1.85f, 1.55f, ProjectBootstrap.MatVelvetRed);
+            BuildWindow(env, "Win_LivingE", new Vector3(11.80f, 2.35f, 6.6f), FaceW, 1.85f, 1.55f, ProjectBootstrap.MatVelvetRed);
+            BuildWindow(env, "Win_KitchenS", new Vector3(6.2f, 2.35f, -10.80f), FaceN, 1.85f, 1.45f, ProjectBootstrap.MatVelvetGreen);
+            BuildWindow(env, "Win_KitchenE", new Vector3(11.80f, 2.35f, -1.5f), FaceW, 1.65f, 1.45f, ProjectBootstrap.MatVelvetGreen);
+            BuildWindow(env, "Win_BedroomN", new Vector3(-8.8f, 2.35f, 10.80f), FaceS, 1.85f, 1.55f, ProjectBootstrap.MatVelvetRed);
+            BuildWindow(env, "Win_StudyW", new Vector3(-11.80f, 2.35f, 2.3f), FaceE, 1.55f, 1.45f, ProjectBootstrap.MatVelvetRed);
+
+            // Framed Winter Storybook Paintings
+            BuildFramedPainting(env, "Art_LivingW", new Vector3(0.13f, 2.35f, 7.6f), FaceE, 1.4f, 1.0f, ProjectBootstrap.MatPainting0);
+            BuildFramedPainting(env, "Art_LivingS", new Vector3(7.2f, 2.35f, 0.13f), FaceN, 1.5f, 1.05f, ProjectBootstrap.MatPainting1);
+            BuildFramedPainting(env, "Art_HallW1", new Vector3(-3.37f, 2.35f, -1.2f), FaceE, 1.25f, 0.9f, ProjectBootstrap.MatPainting2);
+            BuildFramedPainting(env, "Art_HallE1", new Vector3(-0.13f, 2.35f, -8.2f), FaceW, 1.25f, 0.9f, ProjectBootstrap.MatPainting3);
+            BuildFramedPainting(env, "Art_BedroomS", new Vector3(-7.5f, 2.35f, 4.13f), FaceN, 1.4f, 1.0f, ProjectBootstrap.MatPainting1);
+            BuildFramedPainting(env, "Art_KitchenW", new Vector3(0.13f, 2.35f, -2.2f), FaceE, 1.3f, 0.95f, ProjectBootstrap.MatPainting0);
+
+            // Ceiling with high wooden beams (4.2m).
+            Box(env, "Ceiling", new Vector3(0f, h + 0.05f, 0f), new Vector3(24.6f, 0.1f, 22.6f), ProjectBootstrap.MatCreamTrim);
             for (int i = 0; i < 9; i++)
-                Box(env, "CeilingBeam", new Vector3(-11f + i * 2.75f, h - 0.08f, 0f), new Vector3(0.22f, 0.18f, 22.4f), ProjectBootstrap.MatDarkWood, false);
+                Box(env, "CeilingBeam", new Vector3(-11f + i * 2.75f, h - 0.10f, 0f), new Vector3(0.24f, 0.20f, 22.4f), ProjectBootstrap.MatDarkWood, false);
 
             // ---- Living room (x 0..12, z 0..11): tree, fireplace (exit), gifts arrive here ----
-            BuildTree(env, new Vector3(5.5f, 0f, 6.5f), 1f);
-            PresentsAround(env, new Vector3(5.5f, 0f, 6.5f), 0.9f, 1.55f, 8, 202, 0.2f, 0.38f, 10.5f);
-            TrainLoop(env, new Vector3(5.5f, 0.01f, 3.6f), 0.42f);
+            BuildTree(env, new Vector3(5.5f, 0f, 6.5f), 1.32f);
+            PresentsAround(env, new Vector3(5.5f, 0f, 6.5f), 1.05f, 1.85f, 10, 202, 0.26f, 0.48f, 10.5f);
+            TrainLoop(env, new Vector3(5.5f, 0.015f, 3.4f), 0.48f);
             var treeZoneGo = new GameObject("TreeDropZone");
             treeZoneGo.transform.position = new Vector3(5.5f, 0f, 6.5f);
             var placement = new GameObject("PlacementCenter").transform;
@@ -663,39 +900,55 @@ namespace SilentNight.EditorTools
             SetRef(treeZone, "spawner", spawner);
 
             BuildFireplaceEast(env, moodProps, cozyOnly, new Vector3(11.85f, 0f, 3.5f));
-            PackFit(env, KH + "wreath-decorated.fbx", new Vector3(11.2f, 2.0f, 3.5f), FaceW + HolidayYaw, new Vector3(0.3f, 0.85f, 0.85f), ColliderMode.None);
-            PackFit(env, KH + "nutcracker.fbx", new Vector3(10.9f, 0f, 1.4f), FaceW + HolidayYaw, new Vector3(0.55f, 1.05f, 0.55f), ColliderMode.Box);
+            PackFit(env, KH + "wreath-decorated.fbx", new Vector3(11.15f, 2.35f, 3.5f), FaceW + HolidayYaw, new Vector3(0.35f, 1.15f, 1.15f), ColliderMode.None);
+            PackFit(env, KH + "nutcracker.fbx", new Vector3(10.85f, 0f, 1.25f), FaceW + HolidayYaw, new Vector3(0.72f, 1.45f, 0.72f), ColliderMode.Box);
             var chimney = new GameObject("ChimneyExit");
             chimney.transform.position = new Vector3(9.7f, 0f, 3.5f);
             chimney.AddComponent<ChimneyExit>();
 
-            // Furniture.
-            if (PackFit(env, KF + "loungeSofa.fbx", new Vector3(8.5f, 0f, 9.9f), FaceS, new Vector3(2.4f, 0.9f, 0.95f), ColliderMode.Box) == null)
+            // Human-scale Living Room Furniture (~1.5x larger than miniature elf).
+            if (PackFit(env, KF + "loungeSofa.fbx", new Vector3(8.3f, 0f, 9.65f), FaceS, new Vector3(3.55f, 1.38f, 1.42f), ColliderMode.Box) == null)
             {
-                Box(env, "Sofa", new Vector3(8.5f, 0.25f, 9.9f), new Vector3(2.4f, 0.5f, 0.9f), ProjectBootstrap.MatFabric);
-                Box(env, "SofaBack", new Vector3(8.5f, 0.7f, 10.45f), new Vector3(2.4f, 0.9f, 0.2f), ProjectBootstrap.MatFabric);
-                Box(env, "SofaArmL", new Vector3(7.2f, 0.4f, 9.9f), new Vector3(0.2f, 0.8f, 0.9f), ProjectBootstrap.MatFabric);
-                Box(env, "SofaArmR", new Vector3(9.8f, 0.4f, 9.9f), new Vector3(0.2f, 0.8f, 0.9f), ProjectBootstrap.MatFabric);
+                Box(env, "Sofa", new Vector3(8.3f, 0.38f, 9.65f), new Vector3(3.5f, 0.75f, 1.35f), ProjectBootstrap.MatFabric);
+                Box(env, "SofaBack", new Vector3(8.3f, 0.98f, 10.35f), new Vector3(3.5f, 1.35f, 0.28f), ProjectBootstrap.MatFabric);
             }
-            // Coffee table on legs: an elf can crouch under it (TopSlab keeps crawlspace clear).
-            if (PackFit(env, KF + "tableCoffee.fbx", new Vector3(8.5f, 0f, 8.4f), FaceS, new Vector3(1.2f, 0.55f, 0.6f), ColliderMode.TopSlab) == null)
+            // Giant Coffee Table on legs: an elf can walk/crouch right under it (TopSlab keeps crawlspace clear).
+            GameObject coffeeTbl = PackFit(env, KF + "tableCoffee.fbx", new Vector3(8.5f, 0f, 8.15f), FaceS, new Vector3(1.85f, 0.78f, 0.95f), ColliderMode.TopSlab);
+            if (coffeeTbl == null)
             {
-                Box(env, "CoffeeTable", new Vector3(8.5f, 0.53f, 8.4f), new Vector3(1.2f, 0.06f, 0.6f), ProjectBootstrap.MatDarkWood);
-                foreach (float dx in new[] { -0.55f, 0.55f })
-                    foreach (float dz in new[] { -0.25f, 0.25f })
-                        Box(env, "CoffeeTableLeg", new Vector3(8.5f + dx, 0.25f, 8.4f + dz), new Vector3(0.06f, 0.5f, 0.06f), ProjectBootstrap.MatDarkWood);
+                Box(env, "CoffeeTable", new Vector3(8.5f, 0.74f, 8.15f), new Vector3(1.85f, 0.08f, 0.95f), ProjectBootstrap.MatDarkWood);
+                foreach (float dx in new[] { -0.82f, 0.82f })
+                    foreach (float dz in new[] { -0.38f, 0.38f })
+                        Box(env, "CoffeeTableLeg", new Vector3(8.5f + dx, 0.36f, 8.15f + dz), new Vector3(0.08f, 0.72f, 0.08f), ProjectBootstrap.MatDarkWood);
             }
-            HideSpot(env, "HidingSpot_CoffeeTable", new Vector3(8.5f, 0.23f, 8.4f), new Vector3(1.05f, 0.5f, 0.48f), "под журнальным столиком");
-            if (PackFit(env, KF + "loungeChair.fbx", new Vector3(1.8f, 0f, 9.6f), FaceS + 25f, new Vector3(0.95f, 0.9f, 0.95f), ColliderMode.Box) == null)
+            else
             {
-                Box(env, "Armchair", new Vector3(1.8f, 0.3f, 9.6f), new Vector3(0.9f, 0.6f, 0.9f), ProjectBootstrap.MatRed);
-                Box(env, "ArmchairBack", new Vector3(1.8f, 0.75f, 10.0f), new Vector3(0.9f, 0.9f, 0.15f), ProjectBootstrap.MatRed);
+                float cty = TopY(coffeeTbl);
+                PackFit(env, KF + "books.fbx", new Vector3(8.15f, cty, 8.15f), 20f, new Vector3(0.38f, 0.26f, 0.32f), ColliderMode.None);
+                PackFit(env, KF + "plantSmall1.fbx", new Vector3(8.85f, cty, 8.15f), 0f, new Vector3(0.32f, 0.38f, 0.32f), ColliderMode.None);
             }
-            PackFit(env, KF + "lampRoundFloor.fbx", new Vector3(10.35f, 0f, 10.1f), FaceS, new Vector3(0.45f, 1.55f, 0.45f), ColliderMode.Box);
-            PackFit(env, KF + "pottedPlant.fbx", new Vector3(0.75f, 0f, 10.15f), FaceS, new Vector3(0.55f, 1.0f, 0.55f), ColliderMode.Box);
-            GameObject lrShelf = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(4.0f, 0f, 10.55f), FaceS, new Vector3(1.25f, 2.0f, 0.45f), ColliderMode.Box);
-            SnapTo(lrShelf, Vector3.forward, 10.8f);
-            FillShelves(env, lrShelf, BookModels, 0.24f, 3, 250, true);
+            HideSpot(env, "HidingSpot_CoffeeTable", new Vector3(8.5f, 0.34f, 8.15f), new Vector3(1.65f, 0.72f, 0.82f), "под журнальным столиком");
+
+            if (PackFit(env, KF + "loungeChair.fbx", new Vector3(1.9f, 0f, 9.35f), FaceS + 25f, new Vector3(1.45f, 1.35f, 1.45f), ColliderMode.Box) == null)
+            {
+                Box(env, "Armchair", new Vector3(1.9f, 0.45f, 9.35f), new Vector3(1.35f, 0.9f, 1.35f), ProjectBootstrap.MatRed);
+            }
+            PackFit(env, KF + "loungeChair.fbx", new Vector3(10.45f, 0f, 6.55f), FaceW - 15f, new Vector3(1.40f, 1.32f, 1.40f), ColliderMode.Box);
+            GameObject sideTbl = PackFit(env, KF + "cabinetBedDrawer.fbx", new Vector3(3.25f, 0f, 10.15f), FaceS, new Vector3(0.78f, 0.85f, 0.72f), ColliderMode.Box);
+            if (sideTbl != null)
+            {
+                SnapTo(sideTbl, Vector3.forward, 10.78f);
+                PackFit(env, KF + "lampRoundTable.fbx", new Vector3(3.25f, TopY(sideTbl), 10.15f), FaceS, new Vector3(0.45f, 0.55f, 0.45f), ColliderMode.None);
+            }
+            PackFit(env, KF + "lampRoundFloor.fbx", new Vector3(10.55f, 0f, 10.0f), FaceS, new Vector3(0.68f, 2.35f, 0.68f), ColliderMode.Box);
+            PackFit(env, KF + "pottedPlant.fbx", new Vector3(0.85f, 0f, 10.05f), FaceS, new Vector3(0.85f, 1.65f, 0.85f), ColliderMode.Box);
+            GameObject lrShelf = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(4.65f, 0f, 10.35f), FaceS, new Vector3(1.85f, 2.95f, 0.62f), ColliderMode.Box);
+            SnapTo(lrShelf, Vector3.forward, 10.78f);
+            FillShelves(env, lrShelf, BookModels, 0.36f, 3, 250, true);
+            GameObject lrShelfW = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(0.55f, 0f, 6.2f), FaceE, new Vector3(0.62f, 2.95f, 1.85f), ColliderMode.Box);
+            SnapTo(lrShelfW, Vector3.left, 0.14f);
+            FillShelves(env, lrShelfW, BookModels, 0.36f, 3, 275, true);
+
             // Old TV with the remote on the stand edge: knock the remote off and the TV hisses white noise.
             SilentNight.Stealth.NoisyTV.Create(env, new Vector3(11.55f, 0f, 8.5f), -90f, Mat(ProjectBootstrap.MatDarkWood));
             // Squeaky toy on the carpet.
@@ -705,7 +958,7 @@ namespace SilentNight.EditorTools
             Toy(env, "ToyCar", new Vector3(7.8f, 0f, 5.4f), 25f, new Vector3(0.40f, 0.20f, 0.30f), ProjectBootstrap.MatRed, null);
             Toy(env, "ToyBlocks", new Vector3(4.0f, 0f, 5.2f), 0f, new Vector3(0.60f, 0.20f, 0.50f), ProjectBootstrap.MatGold, "Хрусть! Эльф споткнулся о кубики.");
             Toy(env, "ToyCar2", new Vector3(2.5f, 0f, 8.5f), -40f, new Vector3(0.40f, 0.20f, 0.30f), ProjectBootstrap.MatGreen, null);
-            Toy(env, "RubberDuck", new Vector3(6.0f, 0f, -4.5f), 0f, new Vector3(0.35f, 0.20f, 0.30f), ProjectBootstrap.MatGold, "Пиии! Эльф наступил на резиновую уточку.");
+            Toy(env, "RubberDuck", new Vector3(6.0f, 0f, -3.5f), 0f, new Vector3(0.35f, 0.20f, 0.30f), ProjectBootstrap.MatGold, "Пиии! Эльф наступил на резиновую уточку.");
             Toy(env, "ToyTrain", new Vector3(-1.75f, 0f, 3.0f), 90f, new Vector3(0.50f, 0.20f, 0.40f), ProjectBootstrap.MatRed, "Ту-ту! Эльф наступил на игрушечный паровозик.");
 
             // Garland along the north and east walls (cozy only).
@@ -714,49 +967,62 @@ namespace SilentNight.EditorTools
             for (int i = 0; i < 10; i++)
             {
                 float x = 0.8f + i * 1.15f;
-                float sag = Mathf.Sin(i / 9f * Mathf.PI) * 0.3f;
-                Ball(garland, "Bulb", new Vector3(x, 2.75f - sag, 10.75f), Vector3.one * 0.12f, ProjectBootstrap.MatEmissiveWarm);
+                float sag = Mathf.Sin(i / 9f * Mathf.PI) * 0.28f;
+                Ball(garland, "Bulb", new Vector3(x, 3.65f - sag, 10.75f), Vector3.one * 0.12f,
+                    i % 2 == 0 ? ProjectBootstrap.MatEmissiveWarm : ProjectBootstrap.MatEmissiveGold);
             }
-            LightStrand(garland, new Vector3(0.8f, 0f, 10.78f), new Vector3(11.2f, 0f, 10.78f), 2.85f);
-            LightStrand(garland, new Vector3(11.78f, 0f, 0.8f), new Vector3(11.78f, 0f, 10.2f), 2.85f);
+            LightStrand(garland, new Vector3(0.8f, 0f, 10.78f), new Vector3(11.2f, 0f, 10.78f), 3.75f);
+            LightStrand(garland, new Vector3(11.78f, 0f, 0.8f), new Vector3(11.78f, 0f, 10.2f), 3.75f);
             cozyOnly.Add(garland.gameObject);
 
-            Light treeLight = Point(env, "TreeLight", new Vector3(5.5f, 2.3f, 5.0f), new Color(1f, 0.75f, 0.45f), 5f, 8f);
+            BuildBrassChandelier(env, new Vector3(5.8f, 3.2f, 5.8f), h);
+            BuildBrassSconce(env, new Vector3(8.5f, 2.4f, 10.76f), FaceS);
+            BuildBrassSconce(env, new Vector3(0.14f, 2.4f, 1.5f), FaceE);
+
+            Light treeLight = Point(env, "TreeLight", new Vector3(5.5f, 2.8f, 5.2f), new Color(1f, 0.80f, 0.50f), 6.5f, 11f);
             treeLight.shadows = LightShadows.Soft;
             warm.Add(treeLight);
-            Light fireLight = Point(env, "FireLight", new Vector3(9.4f, 0.9f, 3.5f), new Color(1f, 0.55f, 0.2f), 5f, 8f);
+            Light fireLight = Point(env, "FireLight", new Vector3(9.4f, 1.1f, 3.5f), new Color(1f, 0.58f, 0.22f), 6f, 10f);
             fireLight.shadows = LightShadows.Soft;
             warm.Add(fireLight);
-            Ball(env, "SconceLiving", new Vector3(6f, 2.4f, 10.75f), new Vector3(0.3f, 0.25f, 0.2f), ProjectBootstrap.MatEmissiveWarm);
-            warm.Add(Point(env, "SconceLight", new Vector3(6f, 2.4f, 10.4f), new Color(1f, 0.65f, 0.3f), 3f, 8f));
+            warm.Add(Point(env, "SconceLight", new Vector3(8.5f, 2.4f, 10.2f), new Color(1f, 0.72f, 0.38f), 4f, 9f));
 
-            // ---- Hallway (x -3.5..0, z -11..11): stairs, clock, creaky boards ----
+            // ---- Hallway (x -3.5..0, z -11..11): stairs, towering grandfather clock, coat rack, creaky boards ----
             for (int i = 0; i < 9; i++)
             {
-                float stepH = (i + 1) * 0.22f;
-                GameObject step = Box(env, "Stair" + i, new Vector3(-0.85f, stepH * 0.5f, 6.75f + i * 0.3f), new Vector3(1.3f, stepH, 0.3f), ProjectBootstrap.MatDarkWood);
+                float stepH = (i + 1) * 0.25f;
+                GameObject step = Box(env, "Stair" + i, new Vector3(-0.85f, stepH * 0.5f, 6.75f + i * 0.32f), new Vector3(1.45f, stepH, 0.32f), ProjectBootstrap.MatDarkWood);
                 step.AddComponent<SurfaceTag>().Surface = SurfaceType.CreakyWood;
             }
-            GameObject landing = Box(env, "StairLanding", new Vector3(-0.85f, 0.99f, 10.1f), new Vector3(1.3f, 1.98f, 1.6f), ProjectBootstrap.MatDarkWood);
+            GameObject landing = Box(env, "StairLanding", new Vector3(-0.85f, 1.125f, 10.15f), new Vector3(1.45f, 2.25f, 1.6f), ProjectBootstrap.MatDarkWood);
             landing.AddComponent<SurfaceTag>().Surface = SurfaceType.CreakyWood;
-            Box(env, "Banister", new Vector3(-1.55f, 1.6f, 8.6f), new Vector3(0.06f, 0.06f, 4.6f), ProjectBootstrap.MatWood, false);
-            Box(env, "BanisterPost", new Vector3(-1.55f, 0.8f, 6.65f), new Vector3(0.08f, 1.6f, 0.08f), ProjectBootstrap.MatWood);
+            Box(env, "Banister", new Vector3(-1.62f, 1.85f, 8.6f), new Vector3(0.08f, 0.08f, 4.7f), ProjectBootstrap.MatWood, false);
+            Box(env, "BanisterPost", new Vector3(-1.62f, 0.92f, 6.65f), new Vector3(0.10f, 1.85f, 0.10f), ProjectBootstrap.MatWood);
 
-            Box(env, "GrandfatherClock", new Vector3(-0.4f, 1.05f, 1.0f), new Vector3(0.4f, 2.1f, 0.5f), ProjectBootstrap.MatDarkWood);
-            Box(env, "ClockFace", new Vector3(-0.61f, 1.75f, 1.0f), new Vector3(0.02f, 0.35f, 0.35f), ProjectBootstrap.MatPaper, false);
-            Box(env, "ClockPendulum", new Vector3(-0.61f, 1.1f, 1.0f), new Vector3(0.02f, 0.5f, 0.08f), ProjectBootstrap.MatGold, false);
-            PackFit(env, KF + "coatRackStanding.fbx", new Vector3(-3.0f, 0f, -9.8f), FaceE, new Vector3(0.5f, 1.75f, 0.5f), ColliderMode.Box);
+            // Towering 3.05m Grandfather Clock
+            Box(env, "GrandfatherClock", new Vector3(-0.48f, 1.52f, 1.0f), new Vector3(0.58f, 3.04f, 0.68f), ProjectBootstrap.MatDarkWood);
+            Box(env, "ClockTrimTop", new Vector3(-0.48f, 3.08f, 1.0f), new Vector3(0.68f, 0.12f, 0.78f), ProjectBootstrap.MatBrass, false);
+            Box(env, "ClockFace", new Vector3(-0.78f, 2.48f, 1.0f), new Vector3(0.03f, 0.48f, 0.48f), ProjectBootstrap.MatPaper, false);
+            Box(env, "ClockPendulum", new Vector3(-0.78f, 1.55f, 1.0f), new Vector3(0.03f, 0.72f, 0.12f), ProjectBootstrap.MatBrass, false);
+            PackFit(env, KF + "coatRackStanding.fbx", new Vector3(-2.95f, 0f, -9.8f), FaceE, new Vector3(0.75f, 2.45f, 0.75f), ColliderMode.Box);
+            GameObject hallConsole = PackFit(env, KF + "cabinetBedDrawer.fbx", new Vector3(-3.05f, 0f, -3.4f), FaceE, new Vector3(0.65f, 0.95f, 1.25f), ColliderMode.Box);
+            if (hallConsole != null)
+            {
+                SnapTo(hallConsole, Vector3.left, -3.38f);
+                PackFit(env, KF + "plantSmall1.fbx", new Vector3(-3.05f, TopY(hallConsole), -3.4f), FaceE, new Vector3(0.35f, 0.42f, 0.35f), ColliderMode.None);
+            }
 
             CreakyBoard(env, new Vector3(-1.2f, 0f, -2.0f), new Vector2(2.0f, 2.4f));
             CreakyBoard(env, new Vector3(-2.4f, 0f, 2.4f), new Vector2(1.8f, 2.0f));
             CreakyBoard(env, new Vector3(-2.5f, 0f, 7.5f), new Vector2(1.6f, 1.8f)); // in front of grandpa's door
 
-            Ball(env, "HallLamp", new Vector3(-1.75f, 2.85f, -4f), Vector3.one * 0.3f, ProjectBootstrap.MatEmissiveWarm);
-            flicker.Add(Point(env, "HallLight", new Vector3(-1.75f, 2.6f, -4f), new Color(1f, 0.8f, 0.55f), 3f, 8f));
+            BuildBrassChandelier(env, new Vector3(-1.75f, 3.25f, -4f), h);
+            flicker.Add(Point(env, "HallLight", new Vector3(-1.75f, 2.9f, -4f), new Color(1f, 0.82f, 0.58f), 4.5f, 10f));
 
-            // ---- Kitchen (x 0..12, z -11..0): tile, table, fridge, cat ----
-            GameObject cs = Box(env, "CounterSouth", new Vector3(6.5f, 0.45f, -10.55f), new Vector3(9f, 0.9f, 0.6f), ProjectBootstrap.MatWood);
-            GameObject ce = Box(env, "CounterEast", new Vector3(11.55f, 0.45f, -7.5f), new Vector3(0.6f, 0.9f, 3.5f), ProjectBootstrap.MatWood);
+            // ---- Kitchen (x 0..12, z -11..0): tile, giant human dining table, towering fridge, cat ----
+            // Note: CounterSouth top stays at y = 0.90 around x = 6.5 so House_ElfClimbsOntoKitchenCounter mantle test passes!
+            GameObject cs = Box(env, "CounterSouth", new Vector3(6.5f, 0.45f, -10.45f), new Vector3(9.2f, 0.9f, 0.78f), ProjectBootstrap.MatWood);
+            GameObject ce = Box(env, "CounterEast", new Vector3(11.45f, 0.45f, -7.5f), new Vector3(0.78f, 0.9f, 3.8f), ProjectBootstrap.MatWood);
             if (PackExists(KF + "kitchenCabinet.fbx"))
             {
                 HideRenderer(cs);
@@ -770,60 +1036,77 @@ namespace SilentNight.EditorTools
                 for (int i = 0; i < southUnits.Length; i++)
                 {
                     float ux = 2.45f + i * 0.9f;
-                    GameObject u = PackFit(env, KF + southUnits[i], new Vector3(ux, 0f, -10.55f), FaceN, new Vector3(0.92f, 0.92f, 0.62f), ColliderMode.None);
-                    FitDepth(u, 0.6f, false);
+                    GameObject u = PackModel(env, KF + southUnits[i], new Vector3(ux, 0f, -10.45f), FaceN, new Vector3(0f, 0.90f, 0f), ColliderMode.None);
+                    FitDepth(u, 0.78f, false);
                     SnapTo(u, Vector3.back, -10.85f);
                 }
+                Box(env, "CounterSouthWorktop", new Vector3(6.5f, 0.885f, -10.45f), new Vector3(9.25f, 0.03f, 0.80f), ProjectBootstrap.MatWood, false);
                 string[] eastUnits = { "kitchenCabinet.fbx", "kitchenCabinetDrawer.fbx", "kitchenCabinet.fbx", "kitchenCabinetDrawer.fbx" };
                 for (int i = 0; i < eastUnits.Length; i++)
                 {
                     float uz = -8.85f + i * 0.9f;
-                    GameObject u = PackFit(env, KF + eastUnits[i], new Vector3(11.55f, 0f, uz), FaceW, new Vector3(0.62f, 0.92f, 0.9f), ColliderMode.None);
-                    FitDepth(u, 0.6f, true);
+                    GameObject u = PackModel(env, KF + eastUnits[i], new Vector3(11.45f, 0f, uz), FaceW, new Vector3(0f, 0.90f, 0f), ColliderMode.None);
+                    FitDepth(u, 0.78f, true);
                     SnapTo(u, Vector3.right, 11.85f);
                 }
-                // Countertop props and upper cabinets kept away from x = 6.5 (the mantle test spot).
-                PackFit(env, KF + "kitchenCoffeeMachine.fbx", new Vector3(2.6f, 0.91f, -10.55f), FaceN, new Vector3(0.35f, 0.38f, 0.35f), ColliderMode.None);
-                PackFit(env, KF + "toaster.fbx", new Vector3(3.35f, 0.91f, -10.55f), FaceN, new Vector3(0.32f, 0.25f, 0.25f), ColliderMode.None);
-                PackFit(env, KF + "kitchenMicrowave.fbx", new Vector3(9.65f, 0.91f, -10.55f), FaceN, new Vector3(0.5f, 0.35f, 0.4f), ColliderMode.None);
-                PackFit(env, KF + "kitchenBlender.fbx", new Vector3(11.55f, 0.91f, -6.3f), FaceW, new Vector3(0.28f, 0.38f, 0.28f), ColliderMode.None);
-                GameObject hood = PackFit(env, KF + "hoodModern.fbx", new Vector3(8.75f, 1.85f, -10.55f), FaceN, new Vector3(0.9f, 0.75f, 0.55f), ColliderMode.None);
+                Box(env, "CounterEastWorktop", new Vector3(11.45f, 0.885f, -7.5f), new Vector3(0.80f, 0.03f, 3.85f), ProjectBootstrap.MatWood, false);
+                // Human-scaled countertop props and upper cabinets kept away from x = 6.5 (the mantle test spot).
+                PackFit(env, KF + "kitchenCoffeeMachine.fbx", new Vector3(2.55f, 0.91f, -10.45f), FaceN, new Vector3(0.52f, 0.56f, 0.50f), ColliderMode.None);
+                PackFit(env, KF + "toaster.fbx", new Vector3(3.45f, 0.91f, -10.45f), FaceN, new Vector3(0.46f, 0.36f, 0.36f), ColliderMode.None);
+                PackFit(env, KF + "kitchenMicrowave.fbx", new Vector3(9.65f, 0.91f, -10.45f), FaceN, new Vector3(0.72f, 0.48f, 0.55f), ColliderMode.None);
+                PackFit(env, KF + "kitchenBlender.fbx", new Vector3(11.45f, 0.91f, -6.3f), FaceW, new Vector3(0.42f, 0.56f, 0.42f), ColliderMode.None);
+                GameObject hood = PackFit(env, KF + "hoodModern.fbx", new Vector3(8.75f, 2.05f, -10.45f), FaceN, new Vector3(1.25f, 1.05f, 0.75f), ColliderMode.None);
                 SnapTo(hood, Vector3.back, -10.85f);
-                GameObject upCab = PackFit(env, KF + "kitchenCabinetUpperDouble.fbx", new Vector3(3.35f, 1.85f, -10.65f), FaceN, new Vector3(1.6f, 0.75f, 0.42f), ColliderMode.None);
-                SnapTo(upCab, Vector3.back, -10.85f);
+                GameObject upCab1 = PackFit(env, KF + "kitchenCabinetUpperDouble.fbx", new Vector3(3.25f, 2.05f, -10.55f), FaceN, new Vector3(2.15f, 1.05f, 0.55f), ColliderMode.None);
+                SnapTo(upCab1, Vector3.back, -10.85f);
+                GameObject upCab2 = PackFit(env, KF + "kitchenCabinetUpperDouble.fbx", new Vector3(11.45f, 2.05f, -7.5f), FaceW, new Vector3(0.55f, 1.05f, 2.15f), ColliderMode.None);
+                SnapTo(upCab2, Vector3.right, 11.85f);
             }
             else
             {
-                Box(env, "CounterSouthTop", new Vector3(6.5f, 0.92f, -10.55f), new Vector3(9.05f, 0.04f, 0.65f), ProjectBootstrap.MatTile, false);
+                Box(env, "CounterSouthTop", new Vector3(6.5f, 0.92f, -10.45f), new Vector3(9.25f, 0.04f, 0.80f), ProjectBootstrap.MatTile, false);
             }
-            if (PackFit(env, KF + "kitchenFridgeLarge.fbx", new Vector3(11.4f, 0f, -3.2f), FaceW, new Vector3(0.85f, 1.95f, 0.85f), ColliderMode.Box) == null)
-                Box(env, "Fridge", new Vector3(11.4f, 0.95f, -3.2f), new Vector3(0.8f, 1.9f, 0.8f), ProjectBootstrap.MatMetal);
-            if (PackFit(env, KF + "tableCloth.fbx", new Vector3(6.5f, 0f, -5.5f), FaceS, new Vector3(1.8f, 0.78f, 1.0f), ColliderMode.TopSlab) == null)
+            // Towering Human Refrigerator (2.65m tall)
+            if (PackFit(env, KF + "kitchenFridgeLarge.fbx", new Vector3(11.2f, 0f, -3.2f), FaceW, new Vector3(1.25f, 2.65f, 1.25f), ColliderMode.Box) == null)
+                Box(env, "Fridge", new Vector3(11.2f, 1.32f, -3.2f), new Vector3(1.15f, 2.65f, 1.15f), ProjectBootstrap.MatMetal);
+
+            // Giant Human Dining Table (2.6m x 1.06m x 1.45m) + 4 tall chairs
+            GameObject kitTbl = PackFit(env, KF + "tableCloth.fbx", new Vector3(6.5f, 0f, -5.5f), FaceS, new Vector3(2.60f, 1.06f, 1.45f), ColliderMode.TopSlab);
+            if (kitTbl == null)
             {
-                Box(env, "KitchenTable", new Vector3(6.5f, 0.76f, -5.5f), new Vector3(1.8f, 0.06f, 1.0f), ProjectBootstrap.MatWood);
-                foreach (float dx in new[] { -0.8f, 0.8f })
-                    foreach (float dz in new[] { -0.42f, 0.42f })
-                        Box(env, "TableLeg", new Vector3(6.5f + dx, 0.365f, -5.5f + dz), new Vector3(0.08f, 0.73f, 0.08f), ProjectBootstrap.MatDarkWood);
+                Box(env, "KitchenTable", new Vector3(6.5f, 1.02f, -5.5f), new Vector3(2.60f, 0.08f, 1.45f), ProjectBootstrap.MatWood);
+                foreach (float dx in new[] { -1.15f, 1.15f })
+                    foreach (float dz in new[] { -0.60f, 0.60f })
+                        Box(env, "TableLeg", new Vector3(6.5f + dx, 0.50f, -5.5f + dz), new Vector3(0.10f, 1.0f, 0.10f), ProjectBootstrap.MatDarkWood);
             }
-            HideSpot(env, "HidingSpot_KitchenTable", new Vector3(6.5f, 0.33f, -5.5f), new Vector3(1.65f, 0.7f, 0.85f), "под кухонным столом");
-            if (PackFit(env, KF + "chairCushion.fbx", new Vector3(5.2f, 0f, -5.5f), FaceE, new Vector3(0.55f, 0.85f, 0.55f), ColliderMode.Box) == null)
-                Box(env, "ChairW", new Vector3(5.2f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
-            if (PackFit(env, KF + "chairCushion.fbx", new Vector3(7.8f, 0f, -5.5f), FaceW, new Vector3(0.55f, 0.85f, 0.55f), ColliderMode.Box) == null)
-                Box(env, "ChairE", new Vector3(7.8f, 0.225f, -5.5f), new Vector3(0.45f, 0.45f, 0.45f), ProjectBootstrap.MatDarkWood);
-            Disc(env, "CatBed", new Vector3(3.2f, 0.015f, -2.6f), 0.9f, 0.03f, ProjectBootstrap.MatFabric, false);
+            else
+            {
+                float kty = TopY(kitTbl);
+                PackFit(env, KF + "plantSmall1.fbx", new Vector3(6.5f, kty, -5.5f), 0f, new Vector3(0.38f, 0.45f, 0.38f), ColliderMode.None);
+            }
+            HideSpot(env, "HidingSpot_KitchenTable", new Vector3(6.5f, 0.48f, -5.5f), new Vector3(2.35f, 0.98f, 1.25f), "под кухонным столом");
+            if (PackFit(env, KF + "chairCushion.fbx", new Vector3(4.75f, 0f, -5.5f), FaceE, new Vector3(0.82f, 1.32f, 0.82f), ColliderMode.Box) == null)
+                Box(env, "ChairW", new Vector3(4.75f, 0.35f, -5.5f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatDarkWood);
+            if (PackFit(env, KF + "chairCushion.fbx", new Vector3(8.25f, 0f, -5.5f), FaceW, new Vector3(0.82f, 1.32f, 0.82f), ColliderMode.Box) == null)
+                Box(env, "ChairE", new Vector3(8.25f, 0.35f, -5.5f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatDarkWood);
+            PackFit(env, KF + "chairCushion.fbx", new Vector3(6.5f, 0f, -4.35f), FaceS, new Vector3(0.82f, 1.32f, 0.82f), ColliderMode.Box);
+            PackFit(env, KF + "chairCushion.fbx", new Vector3(6.5f, 0f, -6.65f), FaceN, new Vector3(0.82f, 1.32f, 0.82f), ColliderMode.Box);
+
+            Disc(env, "CatBed", new Vector3(3.2f, 0.015f, -2.6f), 1.15f, 0.04f, ProjectBootstrap.MatVelvetRed, false);
             GameObject catGo = NPCFactory.CreateCat(new Vector3(3.2f, 0f, -2.6f), Quaternion.Euler(0f, 90f, 0f));
-            // Serialize the cat model into the scene so player builds have it too (NPCVisual only auto-loads in the editor).
             var catModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Characters/Cat/Cat.fbx");
             if (catModel != null) catGo.GetComponent<NPCVisual>().Configure(NPCKind.Cat, catModel);
             var catCtrl = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>("Assets/_Project/Art/Characters/Cat/Cat.controller");
             if (catCtrl != null) catGo.GetComponent<NPCVisual>().AnimatorController = catCtrl;
-            Ball(env, "KitchenLamp", new Vector3(6.5f, 2.85f, -5.5f), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
-            flicker.Add(Point(env, "KitchenLight", new Vector3(6.5f, 2.6f, -5.5f), new Color(1f, 0.9f, 0.75f), 5f, 10f));
+            BuildBrassChandelier(env, new Vector3(6.5f, 3.15f, -5.5f), h);
+            Light kitLight = Point(env, "KitchenLight", new Vector3(6.5f, 2.8f, -5.5f), new Color(1f, 0.92f, 0.78f), 6.5f, 12f);
+            kitLight.shadows = LightShadows.Soft;
+            flicker.Add(kitLight);
 
             // ---- Grandpa's bedroom (x -12..-3.5, z 4..11) ----
-            // Bed on legs: crawl space underneath to hide right next to Grandpa.
-            GameObject bedFrame = Box(env, "BedFrame", new Vector3(-10.4f, 0.55f, 8f), new Vector3(2.2f, 0.1f, 1.5f), ProjectBootstrap.MatDarkWood);
-            GameObject bedModel = PackFit(env, KF + "bedDouble.fbx", new Vector3(-10.4f, 0f, 8f), FaceE, new Vector3(2.25f, 0.95f, 1.65f), ColliderMode.None);
+            // Giant Human King-Size Bed on legs: crawl space underneath to hide right next to Grandpa.
+            GameObject bedFrame = Box(env, "BedFrame", new Vector3(-10.0f, 0.72f, 8f), new Vector3(3.05f, 0.12f, 2.20f), ProjectBootstrap.MatDarkWood);
+            GameObject bedModel = PackFit(env, KF + "bedDouble.fbx", new Vector3(-10.0f, 0f, 8f), FaceE, new Vector3(3.15f, 1.38f, 2.35f), ColliderMode.None);
             if (bedModel != null)
             {
                 HideRenderer(bedFrame);
@@ -831,31 +1114,34 @@ namespace SilentNight.EditorTools
             }
             else
             {
-                foreach (float dx in new[] { -1.0f, 1.0f })
-                    foreach (float dz in new[] { -0.65f, 0.65f })
-                        Box(env, "BedLeg", new Vector3(-10.4f + dx, 0.25f, 8f + dz), new Vector3(0.1f, 0.5f, 0.1f), ProjectBootstrap.MatDarkWood);
-                Box(env, "Mattress", new Vector3(-10.35f, 0.67f, 8f), new Vector3(2.0f, 0.14f, 1.4f), ProjectBootstrap.MatPaper);
-                Box(env, "Headboard", new Vector3(-11.55f, 0.6f, 8f), new Vector3(0.1f, 1.2f, 1.6f), ProjectBootstrap.MatDarkWood);
-                Box(env, "Blanket", new Vector3(-9.95f, 0.765f, 8f), new Vector3(1.3f, 0.05f, 1.46f), ProjectBootstrap.MatRed, false);
-                Box(env, "Pillow", new Vector3(-11.15f, 0.8f, 8f), new Vector3(0.4f, 0.12f, 0.9f), ProjectBootstrap.MatPaper, false);
+                foreach (float dx in new[] { -1.35f, 1.35f })
+                    foreach (float dz in new[] { -0.95f, 0.95f })
+                        Box(env, "BedLeg", new Vector3(-10.0f + dx, 0.34f, 8f + dz), new Vector3(0.12f, 0.68f, 0.12f), ProjectBootstrap.MatDarkWood);
+                Box(env, "Mattress", new Vector3(-10.0f, 0.88f, 8f), new Vector3(2.85f, 0.20f, 2.05f), ProjectBootstrap.MatPaper);
+                Box(env, "Headboard", new Vector3(-11.55f, 0.85f, 8f), new Vector3(0.14f, 1.7f, 2.25f), ProjectBootstrap.MatDarkWood);
             }
-            HideSpot(env, "HidingSpot_Bed", new Vector3(-10.4f, 0.23f, 8f), new Vector3(1.9f, 0.5f, 1.2f), "под кроватью Деда");
-            GameObject ns = PackFit(env, KF + "cabinetBedDrawer.fbx", new Vector3(-11.5f, 0f, 6.6f), FaceE, new Vector3(0.55f, 0.6f, 0.55f), ColliderMode.Box);
+            HideSpot(env, "HidingSpot_Bed", new Vector3(-10.1f, 0.34f, 8f), new Vector3(2.75f, 0.72f, 1.95f), "под кроватью Деда");
+            GameObject ns = PackFit(env, KF + "cabinetBedDrawer.fbx", new Vector3(-11.35f, 0f, 6.1f), FaceE, new Vector3(0.82f, 0.90f, 0.82f), ColliderMode.Box);
             if (ns != null)
             {
                 SnapTo(ns, Vector3.left, -11.8f);
-                PackFit(env, KF + "lampRoundTable.fbx", new Vector3(-11.5f, TopY(ns), 6.6f), FaceE, new Vector3(0.32f, 0.36f, 0.32f), ColliderMode.None);
+                PackFit(env, KF + "lampRoundTable.fbx", new Vector3(-11.35f, TopY(ns), 6.1f), FaceE, new Vector3(0.46f, 0.54f, 0.46f), ColliderMode.None);
             }
             else
             {
-                Box(env, "Nightstand", new Vector3(-11.5f, 0.3f, 6.6f), new Vector3(0.5f, 0.6f, 0.5f), ProjectBootstrap.MatDarkWood);
-                Ball(env, "BedsideLamp", new Vector3(-11.5f, 0.75f, 6.6f), Vector3.one * 0.25f, ProjectBootstrap.MatEmissiveWarm);
+                Box(env, "Nightstand", new Vector3(-11.35f, 0.45f, 6.1f), new Vector3(0.75f, 0.90f, 0.75f), ProjectBootstrap.MatDarkWood);
+                Ball(env, "BedsideLamp", new Vector3(-11.35f, 1.1f, 6.1f), Vector3.one * 0.35f, ProjectBootstrap.MatEmissiveWarm);
             }
-            GameObject wd = PackFit(env, KF + "bookcaseClosedDoors.fbx", new Vector3(-6.0f, 0f, 10.55f), FaceS, new Vector3(1.6f, 2.0f, 0.6f), ColliderMode.Box);
-            if (wd != null) SnapTo(wd, Vector3.forward, 10.8f);
-            else Box(env, "Wardrobe", new Vector3(-6.0f, 1.0f, 10.55f), new Vector3(1.6f, 2.0f, 0.6f), ProjectBootstrap.MatDarkWood);
-            Patch(env, "BedroomRug", new Vector3(-8.0f, 0f, 7.5f), new Vector2(2.5f, 2.0f), ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
-            warm.Add(Point(env, "BedsideLight", new Vector3(-11.4f, 0.95f, 6.6f), new Color(1f, 0.7f, 0.4f), 1.5f, 4f));
+            // Towering 2.95m Human Wardrobe + Dresser + Reading Armchair
+            GameObject wd = PackFit(env, KF + "bookcaseClosedDoors.fbx", new Vector3(-6.0f, 0f, 10.35f), FaceS, new Vector3(2.25f, 2.95f, 0.85f), ColliderMode.Box);
+            if (wd != null) SnapTo(wd, Vector3.forward, 10.78f);
+            else Box(env, "Wardrobe", new Vector3(-6.0f, 1.47f, 10.35f), new Vector3(2.25f, 2.95f, 0.85f), ProjectBootstrap.MatDarkWood);
+            GameObject dresser = PackFit(env, KF + "cabinetBedDrawer.fbx", new Vector3(-8.55f, 0f, 10.35f), FaceS, new Vector3(1.45f, 1.15f, 0.75f), ColliderMode.Box);
+            if (dresser != null) SnapTo(dresser, Vector3.forward, 10.78f);
+            PackFit(env, KF + "loungeChair.fbx", new Vector3(-5.1f, 0f, 5.2f), FaceN - 25f, new Vector3(1.38f, 1.28f, 1.38f), ColliderMode.Box);
+            BuildNordicRug(env, "BedroomRug", new Vector3(-7.4f, 0f, 7.5f), new Vector2(4.2f, 3.6f));
+            BuildBrassSconce(env, new Vector3(-11.76f, 2.35f, 8f), FaceE);
+            warm.Add(Point(env, "BedsideLight", new Vector3(-11.0f, 1.55f, 6.1f), new Color(1f, 0.74f, 0.45f), 3.5f, 8f));
 
             var patrolRoot = new GameObject("GrandpaPatrolPoints").transform;
             Transform p1 = new GameObject("Patrol_Kitchen").transform;
@@ -865,83 +1151,78 @@ namespace SilentNight.EditorTools
             // Head on the pillow (-X), gets up towards +X (into the room).
             NPCFactory.CreateGrandpa(new Vector3(-10.4f, 0f, 8f), Quaternion.Euler(0f, 90f, 0f), new[] { p1, p2 });
 
-            // ---- Study (x -12..-3.5, z 0.5..4) — narrow ----
+            // ---- Study (x -12..-3.5, z 0.5..4) — floor-to-ceiling bookcases & human executive desk ----
             string[] bookMats = { ProjectBootstrap.MatRed, ProjectBootstrap.MatGreen, ProjectBootstrap.MatFabric, ProjectBootstrap.MatGold };
             for (int i = 0; i < 4; i++)
             {
-                float x = -11.1f + i * 1.4f;
-                GameObject bs = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(x, 0f, 3.65f), FaceS, new Vector3(1.3f, 2.15f, 0.42f), ColliderMode.Box);
+                float x = -11.0f + i * 1.55f;
+                GameObject bs = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(x, 0f, 3.55f), FaceS, new Vector3(1.48f, 3.05f, 0.58f), ColliderMode.Box);
                 if (bs != null)
                 {
                     SnapTo(bs, Vector3.forward, 3.88f);
-                    FillShelves(env, bs, BookModels, 0.24f, 3, 300 + i * 7, true);
+                    FillShelves(env, bs, BookModels, 0.36f, 3, 300 + i * 7, true);
                 }
                 else
                 {
-                    Box(env, "Bookshelf" + i, new Vector3(x, 1.1f, 3.65f), new Vector3(1.3f, 2.2f, 0.4f), ProjectBootstrap.MatDarkWood);
+                    Box(env, "Bookshelf" + i, new Vector3(x, 1.5f, 3.55f), new Vector3(1.45f, 3.0f, 0.55f), ProjectBootstrap.MatDarkWood);
                     for (int row = 0; row < 3; row++)
-                        Box(env, "Books", new Vector3(x, 0.55f + row * 0.6f, 3.42f), new Vector3(1.1f, 0.35f, 0.06f), bookMats[(i + row) % bookMats.Length], false);
+                        Box(env, "Books", new Vector3(x, 0.75f + row * 0.8f, 3.28f), new Vector3(1.2f, 0.45f, 0.08f), bookMats[(i + row) % bookMats.Length], false);
                 }
             }
-            GameObject desk = PackFit(env, KF + "desk.fbx", new Vector3(-10.6f, 0f, 1.2f), FaceN, new Vector3(1.5f, 0.76f, 0.75f), ColliderMode.Box);
+            GameObject desk = PackFit(env, KF + "desk.fbx", new Vector3(-10.2f, 0f, 1.35f), FaceN, new Vector3(2.15f, 1.06f, 1.05f), ColliderMode.Box);
             if (desk != null)
             {
                 float dy = TopY(desk);
-                PackFit(env, KF + "lampSquareTable.fbx", new Vector3(-11.1f, dy, 1.05f), FaceN, new Vector3(0.28f, 0.36f, 0.28f), ColliderMode.None);
-                PackFit(env, KF + "computerScreen.fbx", new Vector3(-10.5f, dy, 1.05f), FaceN, new Vector3(0.48f, 0.38f, 0.22f), ColliderMode.None);
-                PackFit(env, KF + "computerKeyboard.fbx", new Vector3(-10.5f, dy, 1.32f), FaceN, new Vector3(0.38f, 0.08f, 0.16f), ColliderMode.None);
-                PackFit(env, KF + "books.fbx", new Vector3(-10.0f, dy, 1.15f), FaceN + 15f, new Vector3(0.28f, 0.22f, 0.22f), ColliderMode.None);
+                PackFit(env, KF + "lampSquareTable.fbx", new Vector3(-10.95f, dy, 1.15f), FaceN, new Vector3(0.42f, 0.54f, 0.42f), ColliderMode.None);
+                PackFit(env, KF + "computerScreen.fbx", new Vector3(-10.15f, dy, 1.12f), FaceN, new Vector3(0.72f, 0.56f, 0.32f), ColliderMode.None);
+                PackFit(env, KF + "computerKeyboard.fbx", new Vector3(-10.15f, dy, 1.52f), FaceN, new Vector3(0.55f, 0.10f, 0.24f), ColliderMode.None);
+                PackFit(env, KF + "books.fbx", new Vector3(-9.45f, dy, 1.25f), FaceN + 15f, new Vector3(0.42f, 0.34f, 0.34f), ColliderMode.None);
             }
             else
             {
-                Box(env, "Desk", new Vector3(-10.6f, 0.38f, 1.2f), new Vector3(1.5f, 0.76f, 0.7f), ProjectBootstrap.MatWood);
-                Ball(env, "DeskLamp", new Vector3(-11.1f, 0.9f, 1.1f), Vector3.one * 0.2f, ProjectBootstrap.MatEmissiveWarm);
+                Box(env, "Desk", new Vector3(-10.2f, 0.53f, 1.35f), new Vector3(2.15f, 1.06f, 1.0f), ProjectBootstrap.MatWood);
+                Ball(env, "DeskLamp", new Vector3(-10.95f, 1.25f, 1.15f), Vector3.one * 0.28f, ProjectBootstrap.MatEmissiveWarm);
             }
-            if (PackFit(env, KF + "chairDesk.fbx", new Vector3(-10.6f, 0f, 1.85f), FaceS, new Vector3(0.55f, 0.85f, 0.55f), ColliderMode.Box) == null)
-                Box(env, "DeskChair", new Vector3(-10.6f, 0.25f, 1.85f), new Vector3(0.45f, 0.5f, 0.45f), ProjectBootstrap.MatFabric);
-            if (PackFit(env, KF + "pottedPlant.fbx", new Vector3(-5.0f, 0f, 1.1f), FaceN, new Vector3(0.55f, 1.1f, 0.55f), ColliderMode.Box) == null)
-                Box(env, "Globe", new Vector3(-5.0f, 0.5f, 1.1f), new Vector3(0.4f, 1.0f, 0.4f), ProjectBootstrap.MatDarkWood);
-            flicker.Add(Point(env, "StudyLight", new Vector3(-8f, 2.6f, 2.2f), new Color(1f, 0.85f, 0.6f), 3.5f, 7f));
+            if (PackFit(env, KF + "chairDesk.fbx", new Vector3(-10.2f, 0f, 2.25f), FaceS, new Vector3(0.82f, 1.32f, 0.82f), ColliderMode.Box) == null)
+                Box(env, "DeskChair", new Vector3(-10.2f, 0.4f, 2.25f), new Vector3(0.7f, 0.8f, 0.7f), ProjectBootstrap.MatFabric);
+            if (PackFit(env, KF + "pottedPlant.fbx", new Vector3(-4.8f, 0f, 1.25f), FaceN, new Vector3(0.82f, 1.65f, 0.82f), ColliderMode.Box) == null)
+                Box(env, "Globe", new Vector3(-4.8f, 0.75f, 1.25f), new Vector3(0.6f, 1.5f, 0.6f), ProjectBootstrap.MatDarkWood);
+            BuildBrassChandelier(env, new Vector3(-7.8f, 3.2f, 2.2f), h);
+            flicker.Add(Point(env, "StudyLight", new Vector3(-7.8f, 2.8f, 2.2f), new Color(1f, 0.85f, 0.6f), 4.5f, 8.5f));
 
-            // ---- Garage (x -12..-3.5, z -11..0.5): ice puddle, car, shelves ----
+            // ---- Garage (x -12..-3.5, z -11..0.5): ice puddle, human-scale family SUV, towering storage racks ----
             GameObject ice = Disc(env, "IcePuddle", new Vector3(-8.5f, 0.015f, -7.8f), 4.4f, 0.03f, ProjectBootstrap.MatIce, true);
             ice.AddComponent<SurfaceTag>().Surface = SurfaceType.Ice;
-            Box(env, "CarBody", new Vector3(-10.3f, 0.6f, -2.6f), new Vector3(1.8f, 0.9f, 3.8f), ProjectBootstrap.MatRed);
-            Box(env, "CarCabin", new Vector3(-10.3f, 1.35f, -2.8f), new Vector3(1.6f, 0.6f, 2.0f), ProjectBootstrap.MatMetal);
-            foreach (float dx in new[] { -0.92f, 0.92f })
-                foreach (float dz in new[] { -1.3f, 1.3f })
-                    Box(env, "Wheel", new Vector3(-10.3f + dx, 0.3f, -2.6f + dz), new Vector3(0.2f, 0.6f, 0.6f), ProjectBootstrap.MatDark, false);
+            BuildGarageCar(env, new Vector3(-10.1f, 0f, -2.8f), 1.25f);
             if (PackExists(KF + "bookcaseOpen.fbx"))
             {
                 for (int i = 0; i < 2; i++)
                 {
-                    float gx = -8.75f + i * 1.5f;
-                    GameObject gs = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(gx, 0f, -10.6f), FaceN, new Vector3(1.45f, 2.0f, 0.5f), ColliderMode.Box);
+                    float gx = -8.9f + i * 1.95f;
+                    GameObject gs = PackFit(env, KF + "bookcaseOpen.fbx", new Vector3(gx, 0f, -10.45f), FaceN, new Vector3(1.85f, 2.85f, 0.68f), ColliderMode.Box);
                     SnapTo(gs, Vector3.back, -10.82f);
-                    FillShelves(env, gs, GarageShelfModels, 0.28f, 3, 400 + i * 11, true);
+                    FillShelves(env, gs, GarageShelfModels, 0.38f, 3, 400 + i * 11, true);
                 }
-                GameObject gc1 = PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(-5.2f, 0f, -10.2f), 5f, new Vector3(0.8f, 0.7f, 0.8f), ColliderMode.Box);
-                PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-5.2f, TopY(gc1), -10.2f), 20f, new Vector3(0.7f, 0.6f, 0.7f), ColliderMode.Box);
-                PackFit(env, KF + "trashcan.fbx", new Vector3(-4.3f, 0f, -10.3f), FaceN, new Vector3(0.5f, 0.65f, 0.5f), ColliderMode.Box);
+                GameObject gc1 = PackFit(env, KF + "cardboardBoxClosed.fbx", new Vector3(-5.1f, 0f, -10.0f), 5f, new Vector3(1.15f, 1.0f, 1.15f), ColliderMode.Box);
+                PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-5.1f, TopY(gc1), -10.0f), 20f, new Vector3(0.95f, 0.85f, 0.95f), ColliderMode.Box);
+                PackFit(env, KF + "trashcan.fbx", new Vector3(-4.1f, 0f, -10.1f), FaceN, new Vector3(0.72f, 0.95f, 0.72f), ColliderMode.Box);
             }
             else
             {
-                Box(env, "GarageShelf", new Vector3(-8f, 1.0f, -10.6f), new Vector3(3f, 2f, 0.5f), ProjectBootstrap.MatMetal);
-                Box(env, "Crate1", new Vector3(-5.2f, 0.4f, -10.2f), new Vector3(0.8f, 0.8f, 0.8f), ProjectBootstrap.MatWood);
-                Box(env, "Crate2", new Vector3(-5.2f, 1.15f, -10.2f), new Vector3(0.7f, 0.7f, 0.7f), ProjectBootstrap.MatWood, true, 15f);
+                Box(env, "GarageShelf", new Vector3(-8f, 1.4f, -10.5f), new Vector3(3.6f, 2.8f, 0.65f), ProjectBootstrap.MatMetal);
             }
-            Box(env, "ToolBench", new Vector3(-11.4f, 0.45f, -6f), new Vector3(0.8f, 0.9f, 2.0f), ProjectBootstrap.MatDarkWood);
-            PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-11.4f, 0.9f, -5.5f), FaceE, new Vector3(0.55f, 0.45f, 0.55f), ColliderMode.None);
-            PackFit(env, KF + "radio.fbx", new Vector3(-11.4f, 0.9f, -6.5f), FaceE, new Vector3(0.35f, 0.28f, 0.25f), ColliderMode.None);
-            flicker.Add(Point(env, "GarageLight", new Vector3(-8f, 2.7f, -5f), new Color(0.8f, 0.86f, 1f), 4f, 10f));
+            Box(env, "ToolBench", new Vector3(-11.25f, 0.56f, -6.2f), new Vector3(1.05f, 1.12f, 2.6f), ProjectBootstrap.MatDarkWood);
+            PackFit(env, KF + "cardboardBoxOpen.fbx", new Vector3(-11.25f, 1.12f, -5.5f), FaceE, new Vector3(0.75f, 0.62f, 0.75f), ColliderMode.None);
+            PackFit(env, KF + "radio.fbx", new Vector3(-11.25f, 1.12f, -6.7f), FaceE, new Vector3(0.50f, 0.40f, 0.36f), ColliderMode.None);
+            flicker.Add(Point(env, "GarageLight", new Vector3(-8f, 3.1f, -5f), new Color(0.82f, 0.88f, 1f), 5f, 11f));
 
             // Cobwebs (spooky only).
             var cobwebs = new GameObject("Cobwebs").transform;
             cobwebs.SetParent(moodProps, false);
-            Box(cobwebs, "Web", new Vector3(-11.7f, 2.7f, -10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, 45f);
-            Box(cobwebs, "Web", new Vector3(-3.7f, 2.7f, 10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, -45f);
-            Box(cobwebs, "Web", new Vector3(11.7f, 2.7f, -10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, -45f);
-            Box(cobwebs, "Web", new Vector3(-11.7f, 2.7f, 3.8f), new Vector3(0.5f, 0.5f, 0.02f), ProjectBootstrap.MatPaper, false, 45f);
+            Box(cobwebs, "Web", new Vector3(-11.7f, 3.8f, -10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, 45f);
+            Box(cobwebs, "Web", new Vector3(-3.7f, 3.8f, 10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, -45f);
+            Box(cobwebs, "Web", new Vector3(11.7f, 3.8f, -10.7f), new Vector3(0.6f, 0.6f, 0.02f), ProjectBootstrap.MatPaper, false, -45f);
+            Box(cobwebs, "Web", new Vector3(-11.7f, 3.8f, 3.8f), new Vector3(0.5f, 0.5f, 0.02f), ProjectBootstrap.MatPaper, false, 45f);
             spookyOnly.Add(cobwebs.gameObject);
 
             // ---- mood controller ----
@@ -1124,8 +1405,21 @@ namespace SilentNight.EditorTools
                 // Collider only around the pot, so gifts can be placed right next to the tree.
                 var potCol = new GameObject("TreePotCollider");
                 potCol.transform.SetParent(parent, false);
-                potCol.transform.position = basePos + Vector3.up * 0.3f;
-                potCol.AddComponent<BoxCollider>().size = new Vector3(0.9f, 0.6f, 0.9f);
+                potCol.transform.position = basePos + Vector3.up * 0.35f * s;
+                potCol.AddComponent<BoxCollider>().size = new Vector3(0.95f * s, 0.7f * s, 0.95f * s);
+
+                // Hang 3D custom ornaments (Ornament_A/B/C.fbx) + glowing star topper on the tree!
+                string[] ornModels = { "Decor/Ornament_A.fbx", "Decor/Ornament_B.fbx", "Decor/Ornament_C.fbx" };
+                for (int i = 0; i < 12; i++)
+                {
+                    float tier = i / 4; // 0, 1, 2
+                    float a = (i * 1.35f) + tier * 0.5f;
+                    float y = (0.95f + tier * 0.62f + (i % 2) * 0.18f) * s;
+                    float r = (0.82f - tier * 0.20f) * s;
+                    Vector3 op = basePos + new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r);
+                    Model(parent, ornModels[i % ornModels.Length], "Ornament_" + i, op, (i * 57f) % 360f, 0.85f * s);
+                }
+                Ball(parent, "TreeStar", basePos + Vector3.up * 3.18f * s, Vector3.one * 0.24f * s, ProjectBootstrap.MatEmissiveGold);
                 return;
             }
             Disc(parent, "TreeTrunk", basePos + Vector3.up * 0.35f * s, 0.3f * s, 0.7f * s, ProjectBootstrap.MatDarkWood, true);
@@ -1143,10 +1437,24 @@ namespace SilentNight.EditorTools
             }
         }
 
-        /// <summary>Hub decor fireplace against the north wall (z = wallZ).</summary>
+        /// <summary>Hub decor fireplace against the north wall (z = wallZ), using the custom 3D Fireplace.fbx model.</summary>
         private static void BuildFireplaceNorth(Transform parent, Vector3 wallBase)
         {
             float x = wallBase.x, z = wallBase.z - 0.25f;
+            GameObject fp = Model(parent, "LivingRoom/Fireplace.fbx", "FireplaceModel", new Vector3(x, 0f, z), 180f, 1.55f);
+            if (fp != null)
+            {
+                Bounds b = BoundsOf(fp);
+                float wallFace = wallBase.z;
+                fp.transform.position += new Vector3(0f, 0f, wallFace - b.max.z);
+                b = BoundsOf(fp);
+                var slab = new GameObject("FireplaceCollider");
+                slab.transform.SetParent(parent, false);
+                slab.transform.position = b.center;
+                slab.AddComponent<BoxCollider>().size = b.size;
+                Box(parent, "FireplaceEmbers", new Vector3(x, 0.18f, z - 0.15f), new Vector3(0.65f, 0.14f, 0.25f), ProjectBootstrap.MatEmissiveWarm, false);
+                return;
+            }
             Box(parent, "FireplaceBreast", new Vector3(x, 2f, z), new Vector3(2.6f, 4f, 0.5f), ProjectBootstrap.MatBrick);
             Box(parent, "FireplaceHole", new Vector3(x, 0.55f, z - 0.27f), new Vector3(1.2f, 1.0f, 0.04f), ProjectBootstrap.MatDark, false);
             Box(parent, "FireplaceMantle", new Vector3(x, 1.25f, z - 0.3f), new Vector3(2.4f, 0.12f, 0.6f), ProjectBootstrap.MatDarkWood);
@@ -1158,7 +1466,7 @@ namespace SilentNight.EditorTools
         private static void BuildFireplaceEast(Transform parent, Transform moodProps, List<GameObject> cozyOnly, Vector3 wallBase)
         {
             float x = wallBase.x - 0.25f, z = wallBase.z;
-            GameObject fp = Model(parent, "LivingRoom/Fireplace.fbx", "FireplaceModel", new Vector3(x, 0f, z), -90f, 1.75f);
+            GameObject fp = Model(parent, "LivingRoom/Fireplace.fbx", "FireplaceModel", new Vector3(x, 0f, z), -90f, 2.0f);
             if (fp != null)
             {
                 // Back flush against the wall (inner face x = wallBase.x - 0.25 - 0.25).
@@ -1540,18 +1848,31 @@ namespace SilentNight.EditorTools
         {
             switch (key)
             {
-                case ProjectBootstrap.MatTile: return 1.5f;
+                case ProjectBootstrap.MatTile: return 1.8f;
                 case ProjectBootstrap.MatSnow: return 4f;
-                case ProjectBootstrap.MatWall: return 3f;
-                case ProjectBootstrap.MatCarpet: return 3f;
+                case ProjectBootstrap.MatWall:
+                case ProjectBootstrap.MatWallBurgundy:
+                case ProjectBootstrap.MatWallSpruce:
+                case ProjectBootstrap.MatWallNavy:
+                case ProjectBootstrap.MatWallOchre: return 2.8f;
+                case ProjectBootstrap.MatCarpet: return 2.4f;
                 case ProjectBootstrap.MatConcrete: return 3f;
-                default: return 2.5f;
+                case ProjectBootstrap.MatBrick: return 2.2f;
+                case ProjectBootstrap.MatPainting0:
+                case ProjectBootstrap.MatPainting1:
+                case ProjectBootstrap.MatPainting2:
+                case ProjectBootstrap.MatPainting3:
+                case ProjectBootstrap.MatEmissiveMoon: return 0f; // 1:1 non-tiled
+                default: return 2.4f;
             }
         }
 
         private static void ApplyTexture(MeshRenderer r, Material m, string key, Vector3 size)
         {
             if (r == null || m == null) return;
+            float t = TileMeters(key);
+            if (t <= 0f) return;
+
             if (!_texCache.TryGetValue(key, out Texture2D tex))
             {
                 tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TexRoot + key + ".png");
@@ -1564,12 +1885,14 @@ namespace SilentNight.EditorTools
                 }
             }
             if (tex == null) return;
-            float t = TileMeters(key);
+
             bool flat = size.y < 0.4f;
             Vector2 tiles = flat ? new Vector2(size.x / t, size.z / t) : new Vector2(Mathf.Max(size.x, size.z) / t, size.y / t);
-            var mpb = new MaterialPropertyBlock();
-            mpb.SetVector("_BaseMap_ST", new Vector4(Mathf.Max(0.25f, tiles.x), Mathf.Max(0.25f, tiles.y), 0f, 0f));
-            r.SetPropertyBlock(mpb);
+            Vector2 clamped = new Vector2(Mathf.Max(0.2f, tiles.x), Mathf.Max(0.2f, tiles.y));
+
+            var tiler = r.gameObject.GetComponent<WorldUvTiling>();
+            if (tiler == null) tiler = r.gameObject.AddComponent<WorldUvTiling>();
+            tiler.Configure(clamped);
         }
 
         /// <summary>Decorative sphere without collider.</summary>
@@ -1624,7 +1947,7 @@ namespace SilentNight.EditorTools
             return go;
         }
 
-        /// <summary>Wall running along X at the given z, with doorway gaps (door centres on X).</summary>
+        /// <summary>Wall running along X at the given z, with doorway gaps (door centres on X) and wooden door frames.</summary>
         private static void WallAlongX(Transform parent, string name, float z, float x0, float x1, float h, float thick, string mat, params float[] doors)
         {
             var list = new List<float>(doors); list.Sort();
@@ -1634,12 +1957,16 @@ namespace SilentNight.EditorTools
                 float a = c - DoorW * 0.5f, b = c + DoorW * 0.5f;
                 if (a - cur > 0.01f) Box(parent, $"{name}_{i++}", new Vector3((cur + a) * 0.5f, h * 0.5f, z), new Vector3(a - cur, h, thick), mat);
                 if (h > DoorH) Box(parent, $"{name}_Lintel{i++}", new Vector3(c, (DoorH + h) * 0.5f, z), new Vector3(DoorW, h - DoorH, thick), mat);
+                // Wooden door architrave (visual only: no colliders so doorways remain 1.4m wide)
+                Box(parent, $"{name}_FrameTop", new Vector3(c, DoorH + 0.05f, z), new Vector3(DoorW + 0.18f, 0.10f, thick + 0.06f), ProjectBootstrap.MatDarkWood, false);
+                Box(parent, $"{name}_FrameL", new Vector3(a - 0.04f, DoorH * 0.5f, z), new Vector3(0.08f, DoorH, thick + 0.05f), ProjectBootstrap.MatDarkWood, false);
+                Box(parent, $"{name}_FrameR", new Vector3(b + 0.04f, DoorH * 0.5f, z), new Vector3(0.08f, DoorH, thick + 0.05f), ProjectBootstrap.MatDarkWood, false);
                 cur = b;
             }
             if (x1 - cur > 0.01f) Box(parent, $"{name}_{i}", new Vector3((cur + x1) * 0.5f, h * 0.5f, z), new Vector3(x1 - cur, h, thick), mat);
         }
 
-        /// <summary>Wall running along Z at the given x, with doorway gaps (door centres on Z).</summary>
+        /// <summary>Wall running along Z at the given x, with doorway gaps (door centres on Z) and wooden door frames.</summary>
         private static void WallAlongZ(Transform parent, string name, float x, float z0, float z1, float h, float thick, string mat, params float[] doors)
         {
             var list = new List<float>(doors); list.Sort();
@@ -1649,9 +1976,198 @@ namespace SilentNight.EditorTools
                 float a = c - DoorW * 0.5f, b = c + DoorW * 0.5f;
                 if (a - cur > 0.01f) Box(parent, $"{name}_{i++}", new Vector3(x, h * 0.5f, (cur + a) * 0.5f), new Vector3(thick, h, a - cur), mat);
                 if (h > DoorH) Box(parent, $"{name}_Lintel{i++}", new Vector3(x, (DoorH + h) * 0.5f, c), new Vector3(thick, h - DoorH, DoorW), mat);
+                // Wooden door architrave (visual only: no colliders so doorways remain 1.4m wide)
+                Box(parent, $"{name}_FrameTop", new Vector3(x, DoorH + 0.05f, c), new Vector3(thick + 0.06f, 0.10f, DoorW + 0.18f), ProjectBootstrap.MatDarkWood, false);
+                Box(parent, $"{name}_FrameL", new Vector3(x, DoorH * 0.5f, a - 0.04f), new Vector3(thick + 0.05f, DoorH, 0.08f), ProjectBootstrap.MatDarkWood, false);
+                Box(parent, $"{name}_FrameR", new Vector3(x, DoorH * 0.5f, b + 0.04f), new Vector3(thick + 0.05f, DoorH, 0.08f), ProjectBootstrap.MatDarkWood, false);
                 cur = b;
             }
             if (z1 - cur > 0.01f) Box(parent, $"{name}_{i}", new Vector3(x, h * 0.5f, (cur + z1) * 0.5f), new Vector3(thick, h, z1 - cur), mat);
+        }
+
+        // ------------------------------------------------------------------ Architectural & Tactile Prop Builders
+
+        /// <summary>Builds wainscoting panels (1.15m), oak/brass chair rail, baseboard, and cream crown molding along X.</summary>
+        private static void BuildWallTrimX(Transform parent, string name, float zFace, float x0, float x1, float wallH, float normalZ)
+        {
+            float len = x1 - x0;
+            float cx = (x0 + x1) * 0.5f;
+            Box(parent, name + "_Wainscot", new Vector3(cx, 0.575f, zFace), new Vector3(len, 1.15f, 0.04f), ProjectBootstrap.MatDarkWood, false);
+            Box(parent, name + "_ChairRail", new Vector3(cx, 1.17f, zFace + normalZ * 0.015f), new Vector3(len, 0.07f, 0.07f), ProjectBootstrap.MatWood, false);
+            Box(parent, name + "_BrassInlay", new Vector3(cx, 1.215f, zFace + normalZ * 0.02f), new Vector3(len, 0.02f, 0.06f), ProjectBootstrap.MatBrass, false);
+            Box(parent, name + "_Baseboard", new Vector3(cx, 0.08f, zFace + normalZ * 0.015f), new Vector3(len, 0.16f, 0.06f), ProjectBootstrap.MatCreamTrim, false);
+            Box(parent, name + "_Crown", new Vector3(cx, wallH - 0.07f, zFace + normalZ * 0.02f), new Vector3(len, 0.14f, 0.08f), ProjectBootstrap.MatCreamTrim, false);
+        }
+
+        /// <summary>Builds wainscoting panels (1.15m), oak/brass chair rail, baseboard, and cream crown molding along Z.</summary>
+        private static void BuildWallTrimZ(Transform parent, string name, float xFace, float z0, float z1, float wallH, float normalX)
+        {
+            float len = z1 - z0;
+            float cz = (z0 + z1) * 0.5f;
+            Box(parent, name + "_Wainscot", new Vector3(xFace, 0.575f, cz), new Vector3(0.04f, 1.15f, len), ProjectBootstrap.MatDarkWood, false);
+            Box(parent, name + "_ChairRail", new Vector3(xFace + normalX * 0.015f, 1.17f, cz), new Vector3(0.07f, 0.07f, len), ProjectBootstrap.MatWood, false);
+            Box(parent, name + "_BrassInlay", new Vector3(xFace + normalX * 0.02f, 1.215f, cz), new Vector3(0.06f, 0.02f, len), ProjectBootstrap.MatBrass, false);
+            Box(parent, name + "_Baseboard", new Vector3(xFace + normalX * 0.015f, 0.08f, cz), new Vector3(0.06f, 0.16f, len), ProjectBootstrap.MatCreamTrim, false);
+            Box(parent, name + "_Crown", new Vector3(xFace + normalX * 0.02f, wallH - 0.07f, cz), new Vector3(0.08f, 0.14f, len), ProjectBootstrap.MatCreamTrim, false);
+        }
+
+        /// <summary>Nordic knitted Christmas rug with cream/gold trim border (visual trim is colliderless).</summary>
+        private static GameObject BuildNordicRug(Transform parent, string name, Vector3 floorCenter, Vector2 size)
+        {
+            GameObject rug = Patch(parent, name, floorCenter, size, ProjectBootstrap.MatCarpet, SurfaceType.Carpet);
+            float y = floorCenter.y + 0.012f;
+            float b = 0.08f;
+            Box(parent, name + "_TrimN", new Vector3(floorCenter.x, y, floorCenter.z + size.y * 0.5f - b * 0.5f), new Vector3(size.x, 0.018f, b), ProjectBootstrap.MatGold, false);
+            Box(parent, name + "_TrimS", new Vector3(floorCenter.x, y, floorCenter.z - size.y * 0.5f + b * 0.5f), new Vector3(size.x, 0.018f, b), ProjectBootstrap.MatGold, false);
+            Box(parent, name + "_TrimW", new Vector3(floorCenter.x - size.x * 0.5f + b * 0.5f, y, floorCenter.z), new Vector3(b, 0.018f, size.y), ProjectBootstrap.MatGold, false);
+            Box(parent, name + "_TrimE", new Vector3(floorCenter.x + size.x * 0.5f - b * 0.5f, y, floorCenter.z), new Vector3(b, 0.018f, size.y), ProjectBootstrap.MatGold, false);
+            return rug;
+        }
+
+        /// <summary>Glowing moonlit winter window with cross muntins, snow sill, brass curtain rod, and velvet drapes.</summary>
+        private static void BuildWindow(Transform parent, string name, Vector3 wallCenter, float yaw, float width, float height, string curtainMat)
+        {
+            var root = new GameObject(name).transform;
+            root.SetParent(parent, false);
+            root.SetPositionAndRotation(wallCenter, Quaternion.Euler(0f, yaw, 0f));
+
+            void LocalBox(string part, Vector3 lp, Vector3 sz, string mat)
+            {
+                GameObject go = Box(root, part, Vector3.zero, sz, mat, false);
+                go.transform.localPosition = lp;
+                go.transform.localRotation = Quaternion.identity;
+            }
+
+            // Outer frame + glowing moonlit glass (local -Z faces into the room)
+            LocalBox("Frame", new Vector3(0f, 0f, 0f), new Vector3(width + 0.16f, height + 0.16f, 0.05f), ProjectBootstrap.MatCreamTrim);
+            LocalBox("Glass", new Vector3(0f, 0f, -0.028f), new Vector3(width, height, 0.02f), ProjectBootstrap.MatEmissiveMoon);
+            // Cross muntins in front of glass (-Z)
+            LocalBox("MuntinV", new Vector3(0f, 0f, -0.042f), new Vector3(0.055f, height, 0.03f), ProjectBootstrap.MatCreamTrim);
+            LocalBox("MuntinH1", new Vector3(0f, height * 0.16f, -0.042f), new Vector3(width, 0.055f, 0.03f), ProjectBootstrap.MatCreamTrim);
+            LocalBox("MuntinH2", new Vector3(0f, -height * 0.18f, -0.042f), new Vector3(width, 0.055f, 0.03f), ProjectBootstrap.MatCreamTrim);
+            // Snow drift on sill + wooden sill
+            LocalBox("Sill", new Vector3(0f, -height * 0.5f - 0.06f, -0.06f), new Vector3(width + 0.28f, 0.08f, 0.16f), ProjectBootstrap.MatCreamTrim);
+            LocalBox("SnowDrift", new Vector3(0f, -height * 0.5f + 0.04f, -0.045f), new Vector3(width * 0.90f, 0.09f, 0.05f), ProjectBootstrap.MatSnow);
+            // Brass curtain rod + velvet curtains
+            LocalBox("CurtainRod", new Vector3(0f, height * 0.5f + 0.14f, -0.07f), new Vector3(width + 0.48f, 0.04f, 0.04f), ProjectBootstrap.MatBrass);
+            LocalBox("CurtainL", new Vector3(-width * 0.5f - 0.06f, -0.05f, -0.07f), new Vector3(0.28f, height + 0.25f, 0.07f), curtainMat);
+            LocalBox("CurtainR", new Vector3(width * 0.5f + 0.06f, -0.05f, -0.07f), new Vector3(0.28f, height + 0.25f, 0.07f), curtainMat);
+        }
+
+        /// <summary>Framed winter night painting with ornate gold/wood frame and brass picture light.</summary>
+        private static void BuildFramedPainting(Transform parent, string name, Vector3 wallCenter, float yaw, float width, float height, string paintingMat)
+        {
+            var root = new GameObject(name).transform;
+            root.SetParent(parent, false);
+            root.SetPositionAndRotation(wallCenter, Quaternion.Euler(0f, yaw, 0f));
+
+            void LocalBox(string part, Vector3 lp, Vector3 sz, string mat)
+            {
+                GameObject go = Box(root, part, Vector3.zero, sz, mat, false);
+                go.transform.localPosition = lp;
+                go.transform.localRotation = Quaternion.identity;
+            }
+
+            LocalBox("OuterFrame", new Vector3(0f, 0f, 0f), new Vector3(width + 0.14f, height + 0.14f, 0.05f), ProjectBootstrap.MatGold);
+            LocalBox("InnerMatte", new Vector3(0f, 0f, -0.015f), new Vector3(width + 0.04f, height + 0.04f, 0.04f), ProjectBootstrap.MatDarkWood);
+            LocalBox("Canvas", new Vector3(0f, 0f, -0.03f), new Vector3(width, height, 0.02f), paintingMat);
+            LocalBox("PictureLamp", new Vector3(0f, height * 0.5f + 0.12f, -0.06f), new Vector3(width * 0.45f, 0.04f, 0.08f), ProjectBootstrap.MatBrass);
+        }
+
+        /// <summary>Sculpted brass wall sconce with warm glowing lampshade.</summary>
+        private static void BuildBrassSconce(Transform parent, Vector3 wallCenter, float yaw)
+        {
+            var root = new GameObject("BrassSconce").transform;
+            root.SetParent(parent, false);
+            root.SetPositionAndRotation(wallCenter, Quaternion.Euler(0f, yaw, 0f));
+
+            void LocalBox(string part, Vector3 lp, Vector3 sz, string mat)
+            {
+                GameObject go = Box(root, part, Vector3.zero, sz, mat, false);
+                go.transform.localPosition = lp;
+                go.transform.localRotation = Quaternion.identity;
+            }
+
+            LocalBox("Backplate", new Vector3(0f, 0f, 0f), new Vector3(0.16f, 0.26f, 0.03f), ProjectBootstrap.MatBrass);
+            LocalBox("Arm", new Vector3(0f, -0.04f, -0.10f), new Vector3(0.04f, 0.04f, 0.18f), ProjectBootstrap.MatBrass);
+            GameObject shade = Disc(root, "Shade", Vector3.zero, 0.24f, 0.20f, ProjectBootstrap.MatEmissiveWarm, false);
+            shade.transform.localPosition = new Vector3(0f, 0.08f, -0.16f);
+        }
+
+        /// <summary>Sculpted brass ceiling chandelier with 4 warm glowing candle bulbs.</summary>
+        private static void BuildBrassChandelier(Transform parent, Vector3 bulbCenter, float ceilingH)
+        {
+            float cordLen = Mathf.Max(0.2f, ceilingH - bulbCenter.y);
+            Disc(parent, "ChandelierRose", new Vector3(bulbCenter.x, ceilingH - 0.02f, bulbCenter.z), 0.32f, 0.04f, ProjectBootstrap.MatBrass, false);
+            Box(parent, "ChandelierRod", new Vector3(bulbCenter.x, bulbCenter.y + cordLen * 0.5f, bulbCenter.z), new Vector3(0.04f, cordLen, 0.04f), ProjectBootstrap.MatBrass, false);
+            Disc(parent, "ChandelierRing", bulbCenter, 0.85f, 0.06f, ProjectBootstrap.MatBrass, false);
+            Box(parent, "ChandelierCrossX", bulbCenter, new Vector3(0.95f, 0.04f, 0.05f), ProjectBootstrap.MatBrass, false);
+            Box(parent, "ChandelierCrossZ", bulbCenter, new Vector3(0.05f, 0.04f, 0.95f), ProjectBootstrap.MatBrass, false);
+
+            Vector3[] offsets = { new Vector3(-0.42f, 0.12f, 0f), new Vector3(0.42f, 0.12f, 0f), new Vector3(0f, 0.12f, -0.42f), new Vector3(0f, 0.12f, 0.42f) };
+            foreach (Vector3 off in offsets)
+            {
+                Disc(parent, "CandleCup", bulbCenter + new Vector3(off.x, 0.04f, off.z), 0.14f, 0.04f, ProjectBootstrap.MatBrass, false);
+                Ball(parent, "CandleGlow", bulbCenter + off, new Vector3(0.16f, 0.22f, 0.16f), ProjectBootstrap.MatEmissiveWarm);
+            }
+        }
+
+        /// <summary>Sculpted Santa's Sleigh with curved golden runners, brass trim, velvet seat, and gift sack.</summary>
+        private static void BuildDetailedSleigh(Transform parent, Vector3 center, float s = 1f)
+        {
+            GameObject sleighMesh = Model(parent, "Hub/Sleigh.fbx", "SantaSleigh", center, 90f, s * 1.05f);
+            if (sleighMesh != null)
+            {
+                var col = sleighMesh.AddComponent<BoxCollider>();
+                col.center = new Vector3(0f, 0.65f, 0f);
+                col.size = new Vector3(2.85f, 1.25f, 1.65f);
+                return;
+            }
+
+            foreach (float sx in new[] { -0.78f * s, 0.78f * s })
+            {
+                Box(parent, "RunnerBlade", center + new Vector3(sx, 0.06f * s, 0f), new Vector3(0.10f * s, 0.12f * s, 3.6f * s), ProjectBootstrap.MatBrass);
+                Box(parent, "RunnerCurl", center + new Vector3(sx, 0.32f * s, 1.75f * s), new Vector3(0.10f * s, 0.45f * s, 0.22f * s), ProjectBootstrap.MatBrass, false);
+                Box(parent, "RunnerStrutF", center + new Vector3(sx, 0.25f * s, 0.95f * s), new Vector3(0.08f * s, 0.30f * s, 0.10f * s), ProjectBootstrap.MatBrass, false);
+                Box(parent, "RunnerStrutB", center + new Vector3(sx, 0.25f * s, -0.95f * s), new Vector3(0.08f * s, 0.30f * s, 0.10f * s), ProjectBootstrap.MatBrass, false);
+            }
+
+            Box(parent, "SleighFloor", center + new Vector3(0f, 0.42f * s, 0f), new Vector3(1.72f * s, 0.16f * s, 2.85f * s), ProjectBootstrap.MatDarkWood);
+            Box(parent, "SleighSideL", center + new Vector3(-0.82f * s, 0.78f * s, 0f), new Vector3(0.12f * s, 0.68f * s, 2.75f * s), ProjectBootstrap.MatRed);
+            Box(parent, "SleighSideR", center + new Vector3(0.82f * s, 0.78f * s, 0f), new Vector3(0.12f * s, 0.68f * s, 2.75f * s), ProjectBootstrap.MatRed);
+            Box(parent, "SleighTrimL", center + new Vector3(-0.84f * s, 1.13f * s, 0f), new Vector3(0.15f * s, 0.06f * s, 2.80f * s), ProjectBootstrap.MatBrass, false);
+            Box(parent, "SleighTrimR", center + new Vector3(0.84f * s, 1.13f * s, 0f), new Vector3(0.15f * s, 0.06f * s, 2.80f * s), ProjectBootstrap.MatBrass, false);
+            Box(parent, "SleighNose", center + new Vector3(0f, 0.75f * s, 1.42f * s), new Vector3(1.75f * s, 0.65f * s, 0.22f * s), ProjectBootstrap.MatRed);
+            Box(parent, "SleighNoseTrim", center + new Vector3(0f, 1.08f * s, 1.44f * s), new Vector3(1.80f * s, 0.08f * s, 0.26f * s), ProjectBootstrap.MatBrass, false);
+            Box(parent, "SleighBack", center + new Vector3(0f, 1.02f * s, -1.32f * s), new Vector3(1.75f * s, 0.95f * s, 0.24f * s), ProjectBootstrap.MatRed);
+            Box(parent, "SeatCushion", center + new Vector3(0f, 0.62f * s, -0.35f * s), new Vector3(1.52f * s, 0.22f * s, 0.85f * s), ProjectBootstrap.MatVelvetGreen, false);
+            Ball(parent, "GiftSack", center + new Vector3(0f, 1.05f * s, -0.78f * s), new Vector3(1.25f * s, 0.88f * s, 0.95f * s), ProjectBootstrap.MatVelvetRed);
+            Ball(parent, "SleighLanternL", center + new Vector3(-0.92f * s, 1.05f * s, 1.35f * s), Vector3.one * 0.20f * s, ProjectBootstrap.MatEmissiveWarm);
+            Ball(parent, "SleighLanternR", center + new Vector3(0.92f * s, 1.05f * s, 1.35f * s), Vector3.one * 0.20f * s, ProjectBootstrap.MatEmissiveWarm);
+        }
+
+        /// <summary>Detailed family station wagon in the garage with roof rack, windows, bumpers, and headlights.</summary>
+        private static void BuildGarageCar(Transform parent, Vector3 floorCenter, float s = 1f)
+        {
+            Box(parent, "CarBody", floorCenter + new Vector3(0f, 0.58f * s, 0f), new Vector3(1.82f * s, 0.76f * s, 3.85f * s), ProjectBootstrap.MatRed);
+            Box(parent, "CarCabin", floorCenter + new Vector3(0f, 1.22f * s, -0.22f * s), new Vector3(1.58f * s, 0.58f * s, 2.15f * s), ProjectBootstrap.MatRed);
+            Box(parent, "WindshieldF", floorCenter + new Vector3(0f, 1.22f * s, 0.86f * s), new Vector3(1.44f * s, 0.44f * s, 0.06f * s), ProjectBootstrap.MatEmissiveMoon, false);
+            Box(parent, "WindshieldB", floorCenter + new Vector3(0f, 1.22f * s, -1.30f * s), new Vector3(1.44f * s, 0.44f * s, 0.06f * s), ProjectBootstrap.MatEmissiveMoon, false);
+            Box(parent, "SideWindows", floorCenter + new Vector3(0f, 1.22f * s, -0.22f * s), new Vector3(1.62f * s, 0.42f * s, 1.85f * s), ProjectBootstrap.MatDark, false);
+            Box(parent, "BumperF", floorCenter + new Vector3(0f, 0.32f * s, 1.96f * s), new Vector3(1.88f * s, 0.16f * s, 0.14f * s), ProjectBootstrap.MatMetal, false);
+            Box(parent, "BumperB", floorCenter + new Vector3(0f, 0.32f * s, -1.96f * s), new Vector3(1.88f * s, 0.16f * s, 0.14f * s), ProjectBootstrap.MatMetal, false);
+            Box(parent, "RoofRack", floorCenter + new Vector3(0f, 1.54f * s, -0.22f * s), new Vector3(1.35f * s, 0.06f * s, 1.65f * s), ProjectBootstrap.MatMetal, false);
+            foreach (float sx in new[] { -0.62f * s, 0.62f * s })
+            {
+                Ball(parent, "Headlight", floorCenter + new Vector3(sx, 0.62f * s, 1.94f * s), new Vector3(0.24f * s, 0.22f * s, 0.08f * s), ProjectBootstrap.MatEmissiveWarm);
+                Box(parent, "Taillight", floorCenter + new Vector3(sx, 0.62f * s, -1.94f * s), new Vector3(0.26f * s, 0.16f * s, 0.06f * s), ProjectBootstrap.MatRed, false);
+            }
+            foreach (float dx in new[] { -0.92f * s, 0.92f * s })
+                foreach (float dz in new[] { -1.25f * s, 1.25f * s })
+                {
+                    Box(parent, "Wheel", floorCenter + new Vector3(dx, 0.32f * s, dz), new Vector3(0.22f * s, 0.64f * s, 0.64f * s), ProjectBootstrap.MatDark, false);
+                    Box(parent, "Hubcap", floorCenter + new Vector3(dx * 1.06f, 0.32f * s, dz), new Vector3(0.06f * s, 0.34f * s, 0.34f * s), ProjectBootstrap.MatMetal, false);
+                }
         }
 
         private static Light Point(Transform parent, string name, Vector3 pos, Color color, float intensity, float range)

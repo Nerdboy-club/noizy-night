@@ -15,7 +15,7 @@ namespace SilentNight.Gifts
             if (i >= 0 && i < ModelPrefabs.Length) ModelPrefabs[i] = modelPrefab;
         }
 
-        public static Gift Create(GiftKind kind, Vector3 pos, Quaternion rot)
+        public static Gift Create(GiftKind kind, Vector3 pos, Quaternion rot, int netId = -1)
         {
             var go = new GameObject($"Gift_{kind}");
             // Build inactive so Awake runs only after the kind/model are configured.
@@ -29,6 +29,7 @@ namespace SilentNight.Gifts
             if (i >= 0 && i < ModelPrefabs.Length && ModelPrefabs[i] != null) visual.SetModelPrefab(ModelPrefabs[i]);
 
             gift.Configure(kind);
+            if (netId >= 0) Gift.RegisterNetId(gift, netId);
             go.SetActive(true);
             return gift;
         }

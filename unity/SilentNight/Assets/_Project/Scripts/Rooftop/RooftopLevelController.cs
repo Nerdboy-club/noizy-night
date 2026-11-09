@@ -20,7 +20,8 @@ namespace SilentNight.Rooftop
             RooftopChimney.TargetNumber = target;
 
             if (chimneys == null || chimneys.Length == 0) return;
-            var rng = new System.Random();
+            int seed = order != null && !string.IsNullOrEmpty(order.Address) ? StableHash(order.Address) : 12345;
+            var rng = new System.Random(seed);
             int targetIdx = rng.Next(chimneys.Length);
             var used = new HashSet<int> { target };
             for (int i = 0; i < chimneys.Length; i++)
@@ -52,6 +53,16 @@ namespace SilentNight.Rooftop
             int start = end;
             while (start > 0 && char.IsDigit(address[start - 1])) start--;
             return int.TryParse(address.Substring(start, end - start + 1), out int v) ? v : 0;
+        }
+
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                int h = 23;
+                for (int i = 0; i < s.Length; i++) h = h * 31 + s[i];
+                return h & 0x7FFFFFFF;
+            }
         }
     }
 }

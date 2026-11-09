@@ -67,6 +67,36 @@ namespace SilentNight.Gifts
             Deliver(gift);
         }
 
+        public void DeliverFromNetwork(Gift gift)
+        {
+            Deliver(gift);
+        }
+
+        public void RemoteDeliver(int netId, int slot, int total, GiftKind kind)
+        {
+            Gift gift = Gift.FindByNetId(netId);
+            if (gift == null)
+            {
+                foreach (var g in FindObjectsByType<Gift>())
+                {
+                    if (g.Kind == kind && !g.IsDelivered && !g.IsHeld)
+                    {
+                        gift = g;
+                        break;
+                    }
+                }
+            }
+
+            if (gift != null)
+            {
+                PlaceUnderTree(gift, slot, total);
+            }
+            Delivered = Mathf.Max(Delivered, slot + 1);
+            GameEvents.RaiseGiftDelivered(gift, Delivered, total);
+            if (Delivered < total)
+                GameEvents.RaiseObjective($"Подарки под ёлкой: {Delivered}/{total}");
+        }
+
         private void Deliver(ICarryable item)
         {
             if (item == null) return;
@@ -80,6 +110,7 @@ namespace SilentNight.Gifts
             if (gift != null)
             {
                 PlaceUnderTree(gift, slot, total);
+                SilentNight.Multiplayer.CoopNetworkManager.Instance?.BroadcastTreeDelivery(gift.NetworkId, slot, total, gift.Kind);
             }
             else if (item.GameObject != null)
             {

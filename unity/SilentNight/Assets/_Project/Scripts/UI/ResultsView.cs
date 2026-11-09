@@ -48,7 +48,7 @@ namespace SilentNight.UI
             for (int i = 0; i < _recapLines.Length; i++)
                 _recapLines[i] = UIFactory.Text("", "sn-recap__line", recap);
 
-            UIFactory.Btn("На базу", () => GameEvents.RaiseRequestReturnToHub(), "sn-btn--green sn-btn--big", _dialog);
+            UIFactory.Btn("На базу", () => SilentNight.Multiplayer.CoopNetworkManager.RequestSynchronizedReturnToHub(false), "sn-btn--green sn-btn--big", _dialog);
             return root;
         }
 
@@ -76,7 +76,16 @@ namespace SilentNight.UI
             _earned.text = "+" + earned;
             int stars = pct >= 90 ? 3 : pct >= 60 ? 2 : 1;
             for (int i = 0; i < 3; i++)
-                _stars[i].SetColors(i < stars ? Palette.Gold : Palette.Unlit, Palette.GoldDark);
+            {
+                int idx = i;
+                bool lit = idx < stars;
+                _stars[idx].SetColors(lit ? Palette.Gold : Palette.Unlit, Palette.GoldDark);
+                if (lit)
+                {
+                    _stars[idx].AddToClassList("sn-bump");
+                    _stars[idx].schedule.Execute(() => _stars[idx].RemoveFromClassList("sn-bump")).StartingIn(120 + idx * 100);
+                }
+            }
             _bonus.style.display = order != null && order.Mood == HouseMood.Spooky ? DisplayStyle.Flex : DisplayStyle.None;
             FillRecap();
         }
@@ -88,6 +97,8 @@ namespace SilentNight.UI
             _rank.EnableInClassList("sn-recap__rank--mouse", rank == StealthRank.QuietAsMouse);
             _rank.EnableInClassList("sn-recap__rank--ninja", rank == StealthRank.AlmostNinja);
             _rank.EnableInClassList("sn-recap__rank--elephant", rank == StealthRank.BullInChinaShop);
+            _rank.AddToClassList("sn-bump");
+            _rank.schedule.Execute(() => _rank.RemoveFromClassList("sn-bump")).StartingIn(220);
 
             var lines = RunStats.BuildRecapLines(_recapLines.Length);
             for (int i = 0; i < _recapLines.Length; i++)

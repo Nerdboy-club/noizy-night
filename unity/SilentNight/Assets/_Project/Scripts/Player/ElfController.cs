@@ -15,16 +15,16 @@ namespace SilentNight.Player
     public class ElfController : MonoBehaviour, IPlayerStatus
     {
         [Header("Speeds (m/s)")]
-        [SerializeField] private float walkSpeed = 2.5f;
-        [SerializeField] private float sprintSpeed = 3.8f;
-        [SerializeField] private float crouchSpeed = 1.4f;
-        [SerializeField] private float groundAcceleration = 22f;
-        [SerializeField] private float airAcceleration = 9f;
+        [SerializeField] private float walkSpeed = 1.85f;
+        [SerializeField] private float sprintSpeed = 2.85f;
+        [SerializeField] private float crouchSpeed = 1.10f;
+        [SerializeField] private float groundAcceleration = 20f;
+        [SerializeField] private float airAcceleration = 8f;
         [Tooltip("Acceleration factor on a fully slippery surface (Slipperiness = 1).")]
         [SerializeField] private float slipperyAccelerationFactor = 0.08f;
         [Tooltip("Each SilentBoots level reduces slipperiness by this fraction.")]
         [SerializeField] private float bootsSlipReductionPerLevel = 0.15f;
-        [SerializeField] private float turnSpeedDegrees = 720f;
+        [SerializeField] private float turnSpeedDegrees = 640f;
         [SerializeField] private float heavyTurnFactor = 0.5f;
 
         [Header("Jump & gravity")]
@@ -67,10 +67,10 @@ namespace SilentNight.Player
         [SerializeField] private float groundProbeDistance = 0.17f;
 
         [Header("Noise")]
-        [SerializeField] private float stepIntervalWalk = 0.42f;
-        [SerializeField] private float stepIntervalSprint = 0.3f;
-        [SerializeField] private float stepIntervalCrouch = 0.55f;
-        [SerializeField] private float minStepSpeed = 0.6f;
+        [SerializeField] private float stepIntervalWalk = 0.46f;
+        [SerializeField] private float stepIntervalSprint = 0.33f;
+        [SerializeField] private float stepIntervalCrouch = 0.58f;
+        [SerializeField] private float minStepSpeed = 0.5f;
         [Tooltip("Each SilentBoots level reduces footstep noise by this fraction.")]
         [SerializeField] private float bootsNoiseReductionPerLevel = 0.15f;
         [SerializeField] private float landingMinFallSpeed = 4f;
@@ -78,8 +78,8 @@ namespace SilentNight.Player
         [SerializeField] private float noiseSmoothing = 3f;
 
         [Header("Stumble (sprinting into a wall)")]
-        [Tooltip("Speed INTO the wall (m/s) needed to faceplant. Walk 2.5, sprint 3.8.")]
-        [SerializeField] private float bumpMinSpeed = 3.3f;
+        [Tooltip("Speed INTO the wall (m/s) needed to faceplant. Walk 1.85, sprint 2.85.")]
+        [SerializeField] private float bumpMinSpeed = 2.55f;
         [Tooltip("Hits with |normal.y| above this are floors/ceilings/slopes, not walls.")]
         [SerializeField] private float bumpMaxWallNormalY = 0.5f;
         [Tooltip("A bump also needs the move to lose at least this fraction of the planar speed (filters glancing slides and steps).")]
@@ -98,8 +98,8 @@ namespace SilentNight.Player
         [Tooltip("One-off impulse on first contact per m/s of approach speed above pushImpactFreeSpeed (N·s per m/s). " +
                  "Sprinting into a door slams it.")]
         [SerializeField] private float pushImpactStrength = 7f;
-        [Tooltip("Approach speed (m/s) below which first contact adds no extra impulse (crouch speed is 1.4).")]
-        [SerializeField] private float pushImpactFreeSpeed = 1.5f;
+        [Tooltip("Approach speed (m/s) below which first contact adds no extra impulse (crouch speed is 1.1).")]
+        [SerializeField] private float pushImpactFreeSpeed = 1.2f;
         [Tooltip("Hard cap of a single push impulse (N·s).")]
         [SerializeField] private float pushMaxImpulse = 20f;
         [Tooltip("A push never makes the contact point faster than the elf's speed times this.")]
@@ -244,6 +244,31 @@ namespace SilentNight.Player
         /// <summary>True when, this frame, the held Huge gift (bike) vetoed part of the elf's move or turn
         /// because its box would have entered static geometry (door frames, walls, furniture).</summary>
         public bool HugeGiftBlocked => _hugeGiftBlocked;
+        public bool IsNetworkRemote => _input != null && _input.IsNetworkRemote;
+
+        private Vector3 _netTargetPos;
+        private float _netTargetYaw;
+        private bool _netHasState;
+
+        public void ApplyNetworkState(Vector3 pos, float yaw, Vector3 planarVel, float verticalVel,
+            bool grounded, bool crouching, bool sprinting, bool mantling, bool jetpacking, float stamina01)
+        {
+            if (!_netHasState || Vector3.Distance(transform.position, pos) > 3.2f)
+            {
+                Teleport(pos, Quaternion.Euler(0f, yaw, 0f), notify: false);
+            }
+            _netTargetPos = pos;
+            _netTargetYaw = yaw;
+            _netHasState = true;
+            _planarVelocity = planarVel;
+            _verticalVelocity = verticalVel;
+            _grounded = grounded;
+            _crouching = crouching;
+            _sprinting = sprinting;
+            _mantling = mantling;
+            _jetpacking = jetpacking;
+            _stamina = Mathf.Clamp01(stamina01) * maxStamina;
+        }
 
         // ---------------- IPlayerStatus ----------------
         public float Stamina01 => maxStamina > 0f ? Mathf.Clamp01(_stamina / maxStamina) : 0f;
@@ -295,7 +320,11 @@ namespace SilentNight.Player
             if (_rig == null) _rig = GetComponent<ThirdPersonCameraRig>();
         }
 
-        private void OnEnable() => GameServices.RegisterPlayer(this, isLocal: true);
+        private void OnEnable()
+        {
+            if (_input == null) _input = GetComponent<ElfInput>();
+            GameServices.RegisterPlayer(this, isLocal: !IsNetworkRemote);
+        }
 
         private void OnDisable() => GameServices.UnregisterPlayer(this);
 
@@ -355,6 +384,24 @@ namespace SilentNight.Player
             float dt = Time.deltaTime;
             if (dt <= 0f || !_cc.enabled) return; // paused (timeScale 0) or controller disabled
             CacheSiblings();
+
+            if (IsNetworkRemote)
+            {
+                if (_netHasState)
+                {
+                    Vector3 cur = transform.position;
+                    Vector3 next = Vector3.Lerp(cur, _netTargetPos, 1f - Mathf.Exp(-18f * dt));
+                    Quaternion nextRot = Quaternion.Slerp(transform.rotation, Quaternion.Euler(0f, _netTargetYaw, 0f), 1f - Mathf.Exp(-18f * dt));
+                    bool wasOn = _cc.enabled;
+                    _cc.enabled = false;
+                    transform.SetPositionAndRotation(next, nextRot);
+                    _cc.enabled = wasOn;
+                }
+                UpdateCapsuleHeight(dt);
+                UpdateFootsteps(dt);
+                UpdateNoiseLevel(dt);
+                return;
+            }
 
             if (_mantleCooldownTimer > 0f) _mantleCooldownTimer -= dt;
             if (_mantling)
@@ -526,8 +573,11 @@ namespace SilentNight.Player
             if (wantsTurn) transform.rotation = facingRot;
 
             // ---- noise ----
-            UpdateFootsteps(dt);
-            UpdateNoiseLevel(dt);
+            if (canControl)
+            {
+                UpdateFootsteps(dt);
+                UpdateNoiseLevel(dt);
+            }
         }
 
         private float GetCameraYaw()

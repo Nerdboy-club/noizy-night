@@ -36,8 +36,8 @@ namespace SilentNight.Player
         [SerializeField] private float massScale = 1f;
 
         [Header("Gait")]
-        private float strideRadPerMeter = 8f; // not serialized: scenes built earlier must not keep old values
-        private float maxSwingDegrees = 55f;
+        private float strideRadPerMeter = 7.2f; // not serialized: scenes built earlier must not keep old values
+        private float maxSwingDegrees = 48f;
         private float mantleScrambleRate = 24f; // rad/s of the leg/arm scramble while clambering onto a ledge
 
         [Header("Falling")]
@@ -46,6 +46,7 @@ namespace SilentNight.Player
         [SerializeField] private float limpDuration = 1.4f;
         [SerializeField] private float getUpDuration = 0.9f;
         [SerializeField] private Key ragdollDebugKey = Key.G;
+        [SerializeField] private bool showDebugGui;
 
         [Header("Co-op: downed")]
         [Tooltip("Co-op only (more than one player): how long a fallen elf stays down so friends can help it up.")]
@@ -163,6 +164,11 @@ namespace SilentNight.Player
             _controller = GetComponent<ElfController>();
             _carry = GetComponent<ElfCarry>();
             _visual = GetComponent<ElfVisual>();
+            if (_visual != null)
+            {
+                _visual.PurgePlaceholderMeshes();
+                _visual.SetBodyVisible(false);
+            }
             _cc = GetComponent<CharacterController>();
             Build();
             // Co-op "help a fallen friend" target (PlayerSetup adds it; scenes baked earlier get it here).
@@ -229,12 +235,20 @@ namespace SilentNight.Player
             if (_built) return;
             _built = true;
 
-            int theme = _visual != null ? Mathf.Clamp(_visual.ThemeIndex, 0, 3) : 0;
-            Material tunic = Mat(Tunic[theme]);
-            Material hat = Mat(Hat[theme]);
-            Material skin = Mat(new Color(1f, 0.84f, 0.72f));
-            Material dark = Mat(new Color(0.14f, 0.1f, 0.1f));
-            Material trim = Mat(new Color(0.96f, 0.96f, 0.96f));
+            int theme = _visual != null ? Mathf.Clamp(_visual.ThemeIndex, 0, 4) : 0;
+            bool hasModel = modelPrefab != null || s_sharedModel != null;
+#if UNITY_EDITOR
+            if (!hasModel)
+            {
+                string variantPath = GetVariantModelPath(theme);
+                hasModel = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(variantPath) != null;
+            }
+#endif
+            Material tunic = hasModel ? null : Mat(Tunic[Mathf.Clamp(theme, 0, 3)]);
+            Material hat = hasModel ? null : Mat(Hat[Mathf.Clamp(theme, 0, 3)]);
+            Material skin = hasModel ? null : Mat(new Color(1f, 0.84f, 0.72f));
+            Material dark = hasModel ? null : Mat(new Color(0.14f, 0.1f, 0.1f));
+            Material trim = hasModel ? null : Mat(new Color(0.96f, 0.96f, 0.96f));
 
             var go = new GameObject("ElfRagdoll");
             _puppetRoot = go.transform;
@@ -243,35 +257,38 @@ namespace SilentNight.Player
             _puppetRoot.SetPositionAndRotation(basePos, yaw);
 
             // Local layout (feet at y = 0, facing +Z, character's left = -X).
-            _pelvis = MakeLimb("Pelvis", null, new Vector3(0f, 0.40f, 0f), Vector3.zero, 0.15f, 0.2f, 5f, tunic, PrimitiveType.Sphere, new Vector3(0.30f, 0.24f, 0.26f));
-            _torso = MakeLimb("Torso", _pelvis, new Vector3(0f, 0.60f, 0f), new Vector3(0f, 0.48f, 0f), 0.15f, 0.30f, 7f, tunic, PrimitiveType.Capsule, new Vector3(0.34f, 0.17f, 0.28f));
-            _head = MakeLimb("Head", _torso, new Vector3(0f, 0.88f, 0f), new Vector3(0f, 0.76f, 0f), 0.18f, 0.0f, 3f, skin, PrimitiveType.Sphere, new Vector3(0.38f, 0.36f, 0.36f));
+            _pelvis = MakeLimb("Pelvis", null, new Vector3(0f, 0.40f, 0f), Vector3.zero, 0.15f, 0.2f, 5f, tunic, PrimitiveType.Sphere, new Vector3(0.30f, 0.24f, 0.26f), hasModel);
+            _torso = MakeLimb("Torso", _pelvis, new Vector3(0f, 0.60f, 0f), new Vector3(0f, 0.48f, 0f), 0.15f, 0.30f, 7f, tunic, PrimitiveType.Capsule, new Vector3(0.34f, 0.17f, 0.28f), hasModel);
+            _head = MakeLimb("Head", _torso, new Vector3(0f, 0.88f, 0f), new Vector3(0f, 0.76f, 0f), 0.18f, 0.0f, 3f, skin, PrimitiveType.Sphere, new Vector3(0.38f, 0.36f, 0.36f), hasModel);
 
-            _uArmL = MakeLimb("UArmL", _torso, new Vector3(-0.22f, 0.62f, 0f), new Vector3(-0.22f, 0.72f, 0f), 0.055f, 0.20f, 1.2f, tunic, PrimitiveType.Capsule, new Vector3(0.11f, 0.11f, 0.11f));
-            _lArmL = MakeLimb("LArmL", _uArmL, new Vector3(-0.22f, 0.44f, 0f), new Vector3(-0.22f, 0.53f, 0f), 0.05f, 0.18f, 0.8f, skin, PrimitiveType.Capsule, new Vector3(0.10f, 0.09f, 0.10f));
-            _uArmR = MakeLimb("UArmR", _torso, new Vector3(0.22f, 0.62f, 0f), new Vector3(0.22f, 0.72f, 0f), 0.055f, 0.20f, 1.2f, tunic, PrimitiveType.Capsule, new Vector3(0.11f, 0.11f, 0.11f));
-            _lArmR = MakeLimb("LArmR", _uArmR, new Vector3(0.22f, 0.44f, 0f), new Vector3(0.22f, 0.53f, 0f), 0.05f, 0.18f, 0.8f, skin, PrimitiveType.Capsule, new Vector3(0.10f, 0.09f, 0.10f));
+            _uArmL = MakeLimb("UArmL", _torso, new Vector3(-0.20f, 0.60f, 0f), new Vector3(-0.20f, 0.70f, 0f), 0.055f, 0.20f, 1.2f, tunic, PrimitiveType.Capsule, new Vector3(0.11f, 0.11f, 0.11f), hasModel);
+            _lArmL = MakeLimb("LArmL", _uArmL, new Vector3(-0.20f, 0.42f, 0.02f), new Vector3(-0.20f, 0.51f, 0f), 0.05f, 0.18f, 0.8f, skin, PrimitiveType.Capsule, new Vector3(0.10f, 0.09f, 0.10f), hasModel);
+            _uArmR = MakeLimb("UArmR", _torso, new Vector3(0.20f, 0.60f, 0f), new Vector3(0.20f, 0.70f, 0f), 0.055f, 0.20f, 1.2f, tunic, PrimitiveType.Capsule, new Vector3(0.11f, 0.11f, 0.11f), hasModel);
+            _lArmR = MakeLimb("LArmR", _uArmR, new Vector3(0.20f, 0.42f, 0.02f), new Vector3(0.20f, 0.51f, 0f), 0.05f, 0.18f, 0.8f, skin, PrimitiveType.Capsule, new Vector3(0.10f, 0.09f, 0.10f), hasModel);
 
-            _uLegL = MakeLimb("ULegL", _pelvis, new Vector3(-0.09f, 0.27f, 0f), new Vector3(-0.09f, 0.36f, 0f), 0.065f, 0.18f, 2.5f, dark, PrimitiveType.Capsule, new Vector3(0.13f, 0.1f, 0.13f));
-            _lLegL = MakeLimb("LLegL", _uLegL, new Vector3(-0.09f, 0.1f, 0f), new Vector3(-0.09f, 0.18f, 0f), 0.06f, 0.18f, 1.8f, dark, PrimitiveType.Capsule, new Vector3(0.12f, 0.1f, 0.12f));
-            _uLegR = MakeLimb("ULegR", _pelvis, new Vector3(0.09f, 0.27f, 0f), new Vector3(0.09f, 0.36f, 0f), 0.065f, 0.18f, 2.5f, dark, PrimitiveType.Capsule, new Vector3(0.13f, 0.1f, 0.13f));
-            _lLegR = MakeLimb("LLegR", _uLegR, new Vector3(0.09f, 0.1f, 0f), new Vector3(0.09f, 0.18f, 0f), 0.06f, 0.18f, 1.8f, dark, PrimitiveType.Capsule, new Vector3(0.12f, 0.1f, 0.12f));
+            _uLegL = MakeLimb("ULegL", _pelvis, new Vector3(-0.09f, 0.27f, 0f), new Vector3(-0.09f, 0.36f, 0f), 0.065f, 0.18f, 2.5f, dark, PrimitiveType.Capsule, new Vector3(0.13f, 0.1f, 0.13f), hasModel);
+            _lLegL = MakeLimb("LLegL", _uLegL, new Vector3(-0.09f, 0.1f, 0f), new Vector3(-0.09f, 0.18f, 0f), 0.06f, 0.18f, 1.8f, dark, PrimitiveType.Capsule, new Vector3(0.12f, 0.1f, 0.12f), hasModel);
+            _uLegR = MakeLimb("ULegR", _pelvis, new Vector3(0.09f, 0.27f, 0f), new Vector3(0.09f, 0.36f, 0f), 0.065f, 0.18f, 2.5f, dark, PrimitiveType.Capsule, new Vector3(0.13f, 0.1f, 0.13f), hasModel);
+            _lLegR = MakeLimb("LLegR", _uLegR, new Vector3(0.09f, 0.1f, 0f), new Vector3(0.09f, 0.18f, 0f), 0.06f, 0.18f, 1.8f, dark, PrimitiveType.Capsule, new Vector3(0.12f, 0.1f, 0.12f), hasModel);
 
-            // Cosmetic extras on the head / feet / hands (no colliders).
-            AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(-0.19f, 0.01f, 0f), new Vector3(0.07f, 0.15f, 0.05f), new Vector3(0, 0, 35), skin);
-            AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0.19f, 0.01f, 0f), new Vector3(0.07f, 0.15f, 0.05f), new Vector3(0, 0, -35), skin);
-            AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(-0.07f, 0.03f, 0.165f), new Vector3(0.05f, 0.06f, 0.03f), Vector3.zero, dark);
-            AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0.07f, 0.03f, 0.165f), new Vector3(0.05f, 0.06f, 0.03f), Vector3.zero, dark);
-            AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.37f, 0.03f, 0.37f), Vector3.zero, trim);
-            AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.19f, -0.01f), new Vector3(0.30f, 0.05f, 0.30f), new Vector3(-6, 0, 0), hat);
-            AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.28f, -0.03f), new Vector3(0.22f, 0.05f, 0.22f), new Vector3(-12, 0, 0), hat);
-            AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.36f, -0.06f), new Vector3(0.14f, 0.045f, 0.14f), new Vector3(-20, 0, 0), hat);
-            AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0f, 0.44f, -0.11f), new Vector3(0.09f, 0.09f, 0.09f), Vector3.zero, trim);
-            AddCosmetic(_torso.T, PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.28f, 0.025f, 0.26f), Vector3.zero, trim);
-            AddCosmetic(_lLegL.T, PrimitiveType.Sphere, new Vector3(0f, -0.06f, 0.04f), new Vector3(0.14f, 0.1f, 0.2f), Vector3.zero, Mat(new Color(0.38f, 0.22f, 0.12f)));
-            AddCosmetic(_lLegR.T, PrimitiveType.Sphere, new Vector3(0f, -0.06f, 0.04f), new Vector3(0.14f, 0.1f, 0.2f), Vector3.zero, Mat(new Color(0.38f, 0.22f, 0.12f)));
-            AddCosmetic(_lArmL.T, PrimitiveType.Sphere, new Vector3(0f, -0.1f, 0f), new Vector3(0.11f, 0.11f, 0.11f), Vector3.zero, Mat(new Color(0.8f, 0.1f, 0.12f)));
-            AddCosmetic(_lArmR.T, PrimitiveType.Sphere, new Vector3(0f, -0.1f, 0f), new Vector3(0.11f, 0.11f, 0.11f), Vector3.zero, Mat(new Color(0.8f, 0.1f, 0.12f)));
+            if (!hasModel)
+            {
+                // Cosmetic extras on the head / feet / hands only if NO 3D model is loaded
+                AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(-0.19f, 0.01f, 0f), new Vector3(0.07f, 0.15f, 0.05f), new Vector3(0, 0, 35), skin);
+                AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0.19f, 0.01f, 0f), new Vector3(0.07f, 0.15f, 0.05f), new Vector3(0, 0, -35), skin);
+                AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(-0.07f, 0.03f, 0.165f), new Vector3(0.05f, 0.06f, 0.03f), Vector3.zero, dark);
+                AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0.07f, 0.03f, 0.165f), new Vector3(0.05f, 0.06f, 0.03f), Vector3.zero, dark);
+                AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.37f, 0.03f, 0.37f), Vector3.zero, trim);
+                AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.19f, -0.01f), new Vector3(0.30f, 0.05f, 0.30f), new Vector3(-6, 0, 0), hat);
+                AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.28f, -0.03f), new Vector3(0.22f, 0.05f, 0.22f), new Vector3(-12, 0, 0), hat);
+                AddCosmetic(_head.T, PrimitiveType.Cylinder, new Vector3(0f, 0.36f, -0.06f), new Vector3(0.14f, 0.045f, 0.14f), new Vector3(-20, 0, 0), hat);
+                AddCosmetic(_head.T, PrimitiveType.Sphere, new Vector3(0f, 0.44f, -0.11f), new Vector3(0.09f, 0.09f, 0.09f), Vector3.zero, trim);
+                AddCosmetic(_torso.T, PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.28f, 0.025f, 0.26f), Vector3.zero, trim);
+                AddCosmetic(_lLegL.T, PrimitiveType.Sphere, new Vector3(0f, -0.06f, 0.04f), new Vector3(0.14f, 0.1f, 0.2f), Vector3.zero, Mat(new Color(0.38f, 0.22f, 0.12f)));
+                AddCosmetic(_lLegR.T, PrimitiveType.Sphere, new Vector3(0f, -0.06f, 0.04f), new Vector3(0.14f, 0.1f, 0.2f), Vector3.zero, Mat(new Color(0.38f, 0.22f, 0.12f)));
+                AddCosmetic(_lArmL.T, PrimitiveType.Sphere, new Vector3(0f, -0.1f, 0f), new Vector3(0.11f, 0.11f, 0.11f), Vector3.zero, Mat(new Color(0.8f, 0.1f, 0.12f)));
+                AddCosmetic(_lArmR.T, PrimitiveType.Sphere, new Vector3(0f, -0.1f, 0f), new Vector3(0.11f, 0.11f, 0.11f), Vector3.zero, Mat(new Color(0.8f, 0.1f, 0.12f)));
+            }
 
             // Joints (limits in degrees; for hanging limbs +X swings BACK, -X FORWARD; for spine/head +X leans forward).
             AddJoint(_torso, new Vector3(0f, 0.48f, 0f), -25f, 40f, 30f, 20f);
@@ -323,11 +340,46 @@ namespace SilentNight.Player
         private Quaternion _yaw0;
         private GameObject _model;
 
+        public static string GetVariantModelPath(int themeIndex)
+        {
+            switch (themeIndex)
+            {
+                case 0: return "Assets/_Project/Art/Characters/Elf/Elf_Tripo.fbx";
+                case 1: return "Assets/_Project/Art/Characters/Elf/Elf_P2.fbx";
+                case 2: return "Assets/_Project/Art/Characters/Elf/Elf_P3.fbx";
+                case 3: return "Assets/_Project/Art/Characters/Elf/Elf_P4.fbx";
+                case 4: return "Assets/_Project/Art/Characters/Elf/Elf_P4.fbx";
+                default: return "Assets/_Project/Art/Characters/Elf/Elf_Tripo.fbx";
+            }
+        }
+
+        public void RefreshThemeModel()
+        {
+            if (!_built || _puppetRoot == null) return;
+            if (_model != null)
+            {
+                Destroy(_model);
+                _model = null;
+            }
+            _links.Clear();
+            _hipsBone = null;
+            BuildModel();
+        }
+
         private void BuildModel()
         {
-            // Elves created at runtime (co-op joins) have no serialized model: reuse the one the scene elf brought.
-            if (modelPrefab != null) s_sharedModel = modelPrefab;
-            GameObject prefab = modelPrefab != null ? modelPrefab : s_sharedModel;
+            int theme = _visual != null ? Mathf.Clamp(_visual.ThemeIndex, 0, 4) : 0;
+
+            if (modelPrefab != null && theme == 0) s_sharedModel = modelPrefab;
+            GameObject prefab = null;
+#if UNITY_EDITOR
+            GameObject variant = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(GetVariantModelPath(theme));
+            if (variant != null)
+            {
+                prefab = variant;
+            }
+#endif
+            if (prefab == null) prefab = modelPrefab != null ? modelPrefab : s_sharedModel;
 #if UNITY_EDITOR
             if (prefab == null) prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(DefaultModelPath);
 #endif
@@ -374,15 +426,50 @@ namespace SilentNight.Player
             Link(bones, "LeftUpLeg", _uLegL, Kind.UpLegL); Link(bones, "LeftLeg", _lLegL, Kind.LegL); Link(bones, "LeftFoot", _lLegL, Kind.LegL); Link(bones, "LeftToeBase", _lLegL, Kind.LegL);
             Link(bones, "RightUpLeg", _uLegR, Kind.UpLegR); Link(bones, "RightLeg", _lLegR, Kind.LegR); Link(bones, "RightFoot", _lLegR, Kind.LegR); Link(bones, "RightToeBase", _lLegR, Kind.LegR);
 
-            // Hide the primitive body (colliders stay).
+            // Purge any lingering primitive meshes from limbs to prevent any possibility of Z-fighting
             foreach (Limb l in _limbs)
+            {
+                for (int i = l.T.childCount - 1; i >= 0; i--)
+                {
+                    Transform ch = l.T.GetChild(i);
+                    if (ch.name == "Mesh" || ch.name == "Cosmetic")
+                    {
+                        Destroy(ch.gameObject);
+                    }
+                }
                 foreach (Renderer r in l.T.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+            }
         }
 
         private void Link(System.Collections.Generic.Dictionary<string, Transform> bones, string boneName, Limb limb, Kind kind = Kind.Physical)
         {
             if (!bones.TryGetValue(boneName, out Transform b)) return;
-            _links.Add(new BoneLink { Bone = b, Limb = limb, RestBone = b.rotation, RestLimb = limb.T.rotation, Kind = kind });
+            Quaternion restRot = b.rotation;
+            if (kind == Kind.ArmL)
+            {
+                // Left upper arm: naturally hanging down along torso
+                Quaternion armRestL = _yaw0 * Quaternion.Euler(4f, 0f, 48f) * Quaternion.Inverse(_yaw0);
+                restRot = armRestL * restRot;
+            }
+            else if (kind == Kind.ForeArmL)
+            {
+                // Left forearm: relaxed slight bend at the elbow
+                Quaternion elbowL = _yaw0 * Quaternion.Euler(-14f, 0f, 6f) * Quaternion.Inverse(_yaw0);
+                restRot = elbowL * restRot;
+            }
+            else if (kind == Kind.ArmR)
+            {
+                // Right upper arm: naturally hanging down along torso
+                Quaternion armRestR = _yaw0 * Quaternion.Euler(4f, 0f, -48f) * Quaternion.Inverse(_yaw0);
+                restRot = armRestR * restRot;
+            }
+            else if (kind == Kind.ForeArmR)
+            {
+                // Right forearm: relaxed slight bend at the elbow
+                Quaternion elbowR = _yaw0 * Quaternion.Euler(-14f, 0f, -6f) * Quaternion.Inverse(_yaw0);
+                restRot = elbowR * restRot;
+            }
+            _links.Add(new BoneLink { Bone = b, Limb = limb, RestBone = restRot, RestLimb = limb.T.rotation, Kind = kind });
         }
 
         private static void SetLayerRecursive(Transform t, int layer)
@@ -397,23 +484,62 @@ namespace SilentNight.Player
             Material[] mats = r.sharedMaterials;
             Shader lit = Shader.Find("Universal Render Pipeline/Lit");
             if (lit == null) return;
+            int theme = _visual != null ? Mathf.Clamp(_visual.ThemeIndex, 0, 4) : 0;
             for (int i = 0; i < mats.Length; i++)
             {
                 Material old = mats[i];
-                if (old == null) continue;
-                if (old.shader != null && old.shader.name.StartsWith("Universal Render Pipeline")) continue;
-                var m = new Material(lit) { name = old.name + "_URP" };
-                Texture main = old.HasProperty("_MainTex") ? old.GetTexture("_MainTex") : null;
-                if (main != null) m.SetTexture("_BaseMap", main);
-                Color c = old.HasProperty("_Color") ? old.GetColor("_Color") : Color.white;
-                m.SetColor("_BaseColor", c);
-                if (old.HasProperty("_BumpMap") && old.GetTexture("_BumpMap") != null)
+                var m = new Material(lit) { name = (old != null ? old.name : "ElfMat") + "_URP_Theme" + theme };
+                Texture main = null;
+                if (old != null && old.HasProperty("_BaseMap") && old.GetTexture("_BaseMap") != null)
+                    main = old.GetTexture("_BaseMap");
+                else if (old != null && old.HasProperty("_MainTex") && old.GetTexture("_MainTex") != null)
+                    main = old.GetTexture("_MainTex");
+
+#if UNITY_EDITOR
+                if (main == null)
                 {
-                    m.SetTexture("_BumpMap", old.GetTexture("_BumpMap"));
+                    string vName;
+                    if (theme == 0) vName = "Elf_Tripo";
+                    else if (theme == 1) vName = "Elf_P2";
+                    else if (theme == 2) vName = "Elf_P3";
+                    else vName = "Elf_P4";
+
+                    main = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+                        $"Assets/_Project/Art/Characters/Elf/{vName}_Textures/{vName}_albedo.png");
+                }
+#endif
+                if (main != null) m.SetTexture("_BaseMap", main);
+
+                Color c = Color.white;
+                if (theme == 4)
+                {
+                    c = new Color(0.85f, 0.35f, 0.45f); // Burgundy Ruby tint
+                }
+                m.SetColor("_BaseColor", c);
+
+                Texture bump = null;
+                if (old != null && old.HasProperty("_BumpMap")) bump = old.GetTexture("_BumpMap");
+#if UNITY_EDITOR
+                if (bump == null)
+                {
+                    string vName = (theme == 0) ? "Elf_Tripo" : (theme == 1 ? "Elf_P2" : (theme == 2 ? "Elf_P3" : "Elf_P4"));
+                    bump = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+                        $"Assets/_Project/Art/Characters/Elf/{vName}_Textures/{vName}_normal.png");
+                }
+#endif
+                if (bump != null)
+                {
+                    m.SetTexture("_BumpMap", bump);
                     m.EnableKeyword("_NORMALMAP");
                 }
-                m.SetFloat("_Smoothness", 0.15f);
+                m.SetFloat("_Smoothness", 0.2f);
                 m.SetFloat("_Metallic", 0f);
+                m.SetFloat("_Surface", 0f);
+                m.SetFloat("_Blend", 0f);
+                m.SetFloat("_AlphaClip", 0f);
+                m.SetInt("_ZWrite", 1);
+                m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+                m.SetOverrideTag("RenderType", "Opaque");
                 _mats.Add(m);
                 mats[i] = m;
             }
@@ -425,7 +551,7 @@ namespace SilentNight.Player
 
         private void LateUpdate()
         {
-            if (_model == null || _hipsBone == null) return;
+            if (_model == null || _hipsBone == null || _pelvis == null || _pelvis.T == null || _torso == null || _torso.T == null) return;
             float dt = Time.deltaTime;
             bool procedural = _mode != Mode.Limp; // limp: pure physics
 
@@ -435,6 +561,7 @@ namespace SilentNight.Player
 
             Quaternion pelvisDelta = _pelvis.T.rotation * Quaternion.Inverse(_pelvisRest);
             Quaternion torsoDelta = _torso.T.rotation * Quaternion.Inverse(_pelvisRest);
+            _model.transform.SetPositionAndRotation(_pelvis.T.position, _yaw0);
             _hipsBone.position = _pelvis.T.position + pelvisDelta * (_pelvisRest * _hipsRestOffsetLocal);
 
             for (int i = 0; i < _links.Count; i++)
@@ -450,10 +577,13 @@ namespace SilentNight.Player
                         case Kind.LegL: q = pelvisDelta * Swing(_uLegL.Visual) * Swing(_lLegL.Visual) * l.RestBone; break;
                         case Kind.UpLegR: q = pelvisDelta * Swing(_uLegR.Visual) * l.RestBone; break;
                         case Kind.LegR: q = pelvisDelta * Swing(_uLegR.Visual) * Swing(_lLegR.Visual) * l.RestBone; break;
-                        case Kind.ArmL: q = torsoDelta * Swing(_uArmL.Visual) * l.RestBone; break;
-                        case Kind.ForeArmL: q = torsoDelta * Swing(_uArmL.Visual) * Swing(_lArmL.Visual) * l.RestBone; break;
-                        case Kind.ArmR: q = torsoDelta * Swing(_uArmR.Visual) * l.RestBone; break;
-                        case Kind.ForeArmR: q = torsoDelta * Swing(_uArmR.Visual) * Swing(_lArmR.Visual) * l.RestBone; break;
+                        case Kind.ArmL:
+                        case Kind.ForeArmL:
+                        case Kind.ArmR:
+                        case Kind.ForeArmR:
+                            // Arms driven by live physics Rigidbody simulation (swinging, drag, inertia)
+                            q = l.Limb.T.rotation * Quaternion.Inverse(l.RestLimb) * l.RestBone;
+                            break;
                         default: q = l.Limb.T.rotation * Quaternion.Inverse(l.RestLimb) * l.RestBone; break;
                     }
                 l.Bone.rotation = q;
@@ -461,7 +591,7 @@ namespace SilentNight.Player
         }
 
         private Limb MakeLimb(string name, Limb parent, Vector3 center, Vector3 jointPoint, float radius, float length,
-                              float mass, Material mat, PrimitiveType prim, Vector3 visualScale)
+                              float mass, Material mat, PrimitiveType prim, Vector3 visualScale, bool hasModel = false)
         {
             float S = PlayerSetup.ElfScale;
             center *= S; jointPoint *= S; radius *= S; length *= S; visualScale *= S; mass *= S;
@@ -472,7 +602,7 @@ namespace SilentNight.Player
             t.localPosition = center;
             t.localRotation = Quaternion.identity;
 
-            // Collider
+            // Physical Collider
             if (prim == PrimitiveType.Sphere)
             {
                 var sc = go.AddComponent<SphereCollider>();
@@ -486,18 +616,21 @@ namespace SilentNight.Player
                 cc.height = Mathf.Max(radius * 2f, length + radius * 2f);
             }
 
-            // Visual child (scaled primitive, no collider)
-            GameObject v = GameObject.CreatePrimitive(prim);
-            v.name = "Mesh";
-            Collider vc = v.GetComponent<Collider>();
-            if (vc != null) Destroy(vc);
-            v.layer = go.layer;
-            v.transform.SetParent(t, false);
-            Vector3 s = visualScale;
-            if (prim == PrimitiveType.Capsule) s = new Vector3(radius * 2f, Mathf.Max(radius, (length + radius * 2f) * 0.5f), radius * 2f);
-            v.transform.localScale = s;
-            Renderer r = v.GetComponent<Renderer>();
-            if (r != null && mat != null) r.sharedMaterial = mat;
+            // Visual child ONLY if there is no skinned 3D model
+            if (!hasModel && mat != null)
+            {
+                GameObject v = GameObject.CreatePrimitive(prim);
+                v.name = "Mesh";
+                Collider vc = v.GetComponent<Collider>();
+                if (vc != null) Destroy(vc);
+                v.layer = go.layer;
+                v.transform.SetParent(t, false);
+                Vector3 s = visualScale;
+                if (prim == PrimitiveType.Capsule) s = new Vector3(radius * 2f, Mathf.Max(radius, (length + radius * 2f) * 0.5f), radius * 2f);
+                v.transform.localScale = s;
+                Renderer r = v.GetComponent<Renderer>();
+                if (r != null) r.sharedMaterial = mat;
+            }
 
             var rb = go.AddComponent<Rigidbody>();
             rb.mass = mass * massScale;
@@ -581,19 +714,11 @@ namespace SilentNight.Player
             GoLimp(back + Vector3.up * 1.6f);
         }
 
-        /// <summary>Move the whole puppet to the root (after teleports / scene start).</summary>
+        /// <summary>Move the whole puppet to the root (after teleports / scene start / excessive drift).</summary>
         private void SnapToRoot()
         {
             if (!_built || _puppetRoot == null) return;
-            Vector3 delta = transform.position - _puppetRoot.position;
-            foreach (Limb l in _limbs)
-            {
-                l.Rb.position += delta;
-                l.T.position += delta;
-                l.Rb.linearVelocity = Vector3.zero;
-                l.Rb.angularVelocity = Vector3.zero;
-            }
-            Physics.SyncTransforms();
+            ResetStanding(transform.rotation);
         }
 
         // ---------------------------------------------------------------- update
@@ -602,11 +727,20 @@ namespace SilentNight.Player
         {
             if (!_built) return;
 
-            if (Keyboard.current != null && Keyboard.current[ragdollDebugKey].wasPressedThisFrame && _mode == Mode.Active && PlayerGate.CanControl)
-                GoLimp();
+            if (Keyboard.current != null && _mode == Mode.Active && PlayerGate.CanControl)
+            {
+                var input = GetComponent<ElfInput>();
+                bool isKeyboardP2 = input != null && input.IsKeyboardSecondary;
+                Key key = isKeyboardP2 ? Key.K : ragdollDebugKey;
+                if ((input == null || input.PlayerIndex == 0 || isKeyboardP2) && Keyboard.current[key].wasPressedThisFrame)
+                    GoLimp();
+            }
 
-            // Safety net: root was teleported (spawn, scene change) before we subscribed → don't let the spring fling the puppet.
-            if ((_pelvis.T.position - transform.position).sqrMagnitude > 1f) SnapToRoot();
+            // Safety net: root was teleported (spawn, scene change) before we subscribed → place limbs cleanly at root.
+            if (_pelvis == null || _pelvis.T == null) return;
+            float distSq = (_pelvis.T.position - transform.position).sqrMagnitude;
+            if ((_mode != Mode.Limp && distSq > 1f) || distSq > 36f || float.IsNaN(distSq))
+                SnapToRoot();
 
             switch (_mode)
             {
@@ -690,6 +824,8 @@ namespace SilentNight.Player
                 l.Rb.linearVelocity = Vector3.zero;
                 l.Rb.angularVelocity = Vector3.zero;
             }
+            if (_model != null)
+                _model.transform.SetPositionAndRotation(transform.position, _yaw0);
             Physics.SyncTransforms();
         }
 
@@ -795,16 +931,13 @@ namespace SilentNight.Player
             }
             else
             {
-                Drive(_uArmL, SwingDeg(0.5f * amp * s, 35f) + 4f);
-                Drive(_uArmR, -SwingDeg(0.5f * amp * s, 35f) + 4f);
-                Drive(_lArmL, -18f); Drive(_lArmR, -18f);
+                // Idle or walking: gentle physics driven arm swing during motion, resting at 0 when stopped
+                float armSwing = SwingDeg(0.5f * amp * s, 28f);
+                Drive(_uArmL, armSwing);
+                Drive(_uArmR, -armSwing);
+                Drive(_lArmL, -8f - Mathf.Abs(armSwing) * 0.3f);
+                Drive(_lArmR, -8f - Mathf.Abs(armSwing) * 0.3f);
             }
-        }
-
-        private void OnGUI()
-        {
-            if (!_built) return;
-            GUI.Label(new Rect(10, 10, 600, 24), "Ragdoll: " + _mode + "  strength " + _strength.ToString("0.00") + "  pelvisY " + _pelvis.T.position.y.ToString("0.00") + "  rootY " + transform.position.y.ToString("0.00"));
         }
 
         // ---------------------------------------------------------------- physics
